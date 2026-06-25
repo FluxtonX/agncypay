@@ -113,12 +113,11 @@ const marqueeBrands = [
 export default function LandingPage() {
   return (
     <div className="min-h-screen bg-black text-white selection:bg-white selection:text-black">
-      {/* Header */}
       <motion.header
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-        className="fixed inset-x-0 top-0 z-50 h-[82px] border-b border-white/[0.06] bg-black/80 backdrop-blur-xl"
+        className="fixed inset-x-0 top-0 z-50 h-[70px] border-b border-white/[0.06] bg-black/80 backdrop-blur-xl"
       >
         <div className="mx-auto flex h-full max-w-[1440px] items-center justify-between px-6 lg:px-12">
           <Link href="/" className="flex items-center" aria-label="AgncyPay Home">
@@ -126,9 +125,9 @@ export default function LandingPage() {
               src="/agncypaybrand.png"
               alt="AgncyPay Logo"
               width={160}
-              height={48}
+              height={36}
               priority
-              className="h-[48px] w-auto object-contain object-left scale-[1.5] origin-left"
+              className="h-[36px] w-auto object-contain object-left scale-[1.35] origin-left"
             />
           </Link>
 
@@ -162,8 +161,8 @@ export default function LandingPage() {
       </motion.header>
 
       {/* Hero Section */}
-      <main className="pt-[82px]">
-        <section className="relative overflow-hidden border-b border-white/[0.06] bg-black py-20 lg:py-28">
+      <main className="pt-[70px]">
+        <section className="relative overflow-hidden border-b border-white/[0.06] bg-black py-8 lg:py-12">
           {/* Radial ambient glow */}
           <div className="absolute inset-0 bg-radial-gradient opacity-60 pointer-events-none" />
           
