@@ -183,6 +183,9 @@ export default function InvoicesPage() {
     <div className="space-y-6 select-text">
       {/* Upper header action */}
       <div className="flex justify-between items-center">
+         
+         
+
         <div>
           <h2 className="text-xl font-bold tracking-tight text-white">Invoices & Deposits</h2>
           <p className="text-xs font-semibold text-neutral-400 mt-1">

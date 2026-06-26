@@ -450,7 +450,7 @@ function QuickBooksOnlinePanel({
             {/* Disconnect button below invoices */}
             <div className="flex items-center justify-between pt-2">
               <Link
-                href="/dashboard/quickbooks"
+                href="dashboard/income"
                 className="text-[11px] font-semibold text-[#8f8f8f] hover:text-white"
               >
                 View All Invoices →
