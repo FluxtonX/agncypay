@@ -52,7 +52,7 @@ export function usePayment(id: string): UsePaymentResult {
     setLoading(true);
     setError(null);
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api/v1";
+      const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3001/api/v1";
       const res = await fetch(`${apiUrl}/payments/${id}`, {
         headers: { Authorization: `Bearer ${state.token}` },
       });

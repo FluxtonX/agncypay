@@ -98,7 +98,7 @@ export default function InvoicesPage() {
   const fetchPayments = useCallback(async () => {
     if (!state.user?.walletId) return;
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api/v1";
+      const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3001/api/v1";
       const res = await fetch(`${apiUrl}/payments/wallet/${state.user.walletId}`, {
         headers: {
           Authorization: `Bearer ${state.token}`,
@@ -128,7 +128,7 @@ export default function InvoicesPage() {
     setSuccessMessage(null);
 
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api/v1";
+      const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3001/api/v1";
       
       // Build split config payload if splits are enabled
       let splitConfig = undefined;

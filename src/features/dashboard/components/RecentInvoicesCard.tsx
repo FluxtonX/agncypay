@@ -61,7 +61,7 @@ export function RecentInvoicesCard() {
           Recent Invoices
         </h3>
         <Link
-          href="/dashboard/invoices"
+          href="/dashboard/income"
           className="text-[10px] font-bold text-neutral-500 hover:text-white transition-colors flex items-center gap-0.5"
         >
           View All <ArrowUpRight className="h-3 w-3" />

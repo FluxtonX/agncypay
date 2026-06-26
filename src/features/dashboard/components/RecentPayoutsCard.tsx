@@ -3,7 +3,7 @@
 import React, { useEffect, useState, startTransition, useCallback } from "react";
 import { Card } from "@/shared/components/ui/Card";
 import { Badge } from "@/shared/components/ui/Badge";
-import { ArrowUpRight, Landmark, Loader2 } from "lucide-react";
+import { ArrowUpRight, Landmark, Loader2, Send } from "lucide-react";
 import Link from "next/link";
 
 interface QBPayout {
@@ -55,9 +55,15 @@ export function RecentPayoutsCard() {
       <div>
         <div className="flex justify-between items-center mb-6">
           <h3 className="text-xs font-bold uppercase tracking-wider text-neutral-400 flex items-center gap-2">
-            <ArrowUpRight className="h-4 w-4 text-neutral-400" />
+            <Send className="h-4 w-4 text-orange-400" />
             Recent Outgoing Payouts
           </h3>
+          <Link
+            href="/dashboard/payouts"
+            className="text-[10px] font-bold text-neutral-500 hover:text-white transition-colors flex items-center gap-0.5"
+          >
+            View All <ArrowUpRight className="h-3 w-3" />
+          </Link>
         </div>
 
         {loading ? (

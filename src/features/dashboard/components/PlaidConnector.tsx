@@ -42,7 +42,7 @@ export function PlaidConnector() {
   const fetchBalances = useCallback(async () => {
     if (!state.user?.walletId) return;
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api/v1";
+      const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3001/api/v1";
       const res = await fetch(`${apiUrl}/wallets/${state.user.walletId}/balances`, {
         headers: {
           Authorization: `Bearer ${state.token}`,
