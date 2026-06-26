@@ -144,16 +144,39 @@ export function RegisterForm() {
 
   // ─── Success state ──────────────────────────────────────────────────────────
   if (success) {
+    const loaderStyle = `
+      @keyframes progress-slide {
+        0% { transform: translateX(-100%); }
+        100% { transform: translateX(250%); }
+      }
+      .animate-progress-slide {
+        animation: progress-slide 1.5s infinite ease-in-out;
+      }
+    `;
+
     return (
-      <div className="flex min-h-screen w-full items-center justify-center bg-[#121212]">
-        <div className="flex flex-col items-center text-center px-6 max-w-[400px]">
-          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-400 mb-6 border border-emerald-500/20">
-            <CheckCircle2 className="h-8 w-8" />
+      <div className="flex min-h-screen w-full items-center justify-center bg-black select-none relative overflow-hidden">
+        <style dangerouslySetInnerHTML={{ __html: loaderStyle }} />
+        {/* Glow */}
+        <div className="absolute top-[50%] left-[50%] -translate-x-[50%] -translate-y-[50%] h-[400px] w-[400px] rounded-full bg-emerald-500/5 blur-[100px] pointer-events-none" />
+        
+        <div className="flex flex-col items-center text-center px-6 relative z-10">
+          <div className="relative mb-6">
+            {/* Outer spinning ring */}
+            <div className="absolute inset-0 rounded-full border border-t-emerald-400 border-r-transparent border-b-emerald-800/20 border-l-transparent animate-spin duration-1000 h-16 w-16 -m-2" />
+            {/* Inner check core */}
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
+              <CheckCircle2 className="h-5 w-5" />
+            </div>
           </div>
-          <h2 className="text-2xl font-bold text-white mb-2">Registration Successful!</h2>
-          <p className="text-sm text-neutral-400">
+          <h2 className="text-xl font-bold text-white tracking-tight">Registration Successful!</h2>
+          <p className="text-xs text-neutral-400 mt-2 font-semibold tracking-wide">
             Your AgncyPay workspace is provisioned. Redirecting to login...
           </p>
+          {/* Linear loader */}
+          <div className="w-48 h-1 bg-[#1A1A1A] rounded-full overflow-hidden mt-6 border border-white/[0.03] relative">
+            <div className="h-full bg-emerald-400 rounded-full absolute left-0 top-0 w-[40%] animate-progress-slide" />
+          </div>
         </div>
       </div>
     );

@@ -71,6 +71,17 @@ function Field({ id, label, type = "text", placeholder, error, autoComplete, reg
   );
 }
 
+// ─── Loader animation style ──────────────────────────────────────────────────
+const loaderStyle = `
+  @keyframes progress-slide {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(250%); }
+  }
+  .animate-progress-slide {
+    animation: progress-slide 1.5s infinite ease-in-out;
+  }
+`;
+
 // ─── LoginForm ────────────────────────────────────────────────────────────────
 export function LoginForm() {
   const router = useRouter();
@@ -79,6 +90,7 @@ export function LoginForm() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [showDemoHelper, setShowDemoHelper] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
+  const [isRedirecting, setIsRedirecting] = useState(false);
 
   const {
     register,
@@ -120,6 +132,7 @@ export function LoginForm() {
         );
       }
 
+      setIsRedirecting(true);
       login(accessToken, user);
       router.push("/dashboard");
     } catch (err: unknown) {
@@ -127,6 +140,37 @@ export function LoginForm() {
       setSubmitError(message);
     }
   };
+
+  if (isRedirecting) {
+    return (
+      <div className="flex min-h-screen w-full items-center justify-center bg-black select-none relative overflow-hidden">
+        <style dangerouslySetInnerHTML={{ __html: loaderStyle }} />
+        {/* Glow */}
+        <div className="absolute top-[50%] left-[50%] -translate-x-[50%] -translate-y-[50%] h-[400px] w-[400px] rounded-full bg-[#A87019]/10 blur-[100px] pointer-events-none" />
+        
+        <div className="flex flex-col items-center text-center px-6 relative z-10">
+          <div className="relative mb-6">
+            {/* Spinning/pulsing outer gold ring */}
+            <div className="absolute inset-0 rounded-full border border-t-[#D4AF37] border-r-transparent border-b-[#A87019]/30 border-l-transparent animate-spin duration-1000 h-16 w-16 -m-2" />
+            {/* Pulsing inner core */}
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#A87019]/10 border border-[#D4AF37]/30 text-[#D4AF37] animate-pulse">
+              <svg className="h-5 w-5 animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+              </svg>
+            </div>
+          </div>
+          <h2 className="text-xl font-bold text-white tracking-tight">Authenticating Session</h2>
+          <p className="text-xs text-neutral-400 mt-2 font-semibold tracking-wide">
+            Syncing double-entry ledger & credentials...
+          </p>
+          {/* Linear loader */}
+          <div className="w-48 h-1 bg-[#1A1A1A] rounded-full overflow-hidden mt-6 border border-white/[0.03] relative">
+            <div className="h-full bg-gradient-to-r from-[#A87019] to-[#D4AF37] rounded-full absolute left-0 top-0 w-[40%] animate-progress-slide" />
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="grid min-h-screen w-full grid-cols-1 bg-black font-sans text-white lg:grid-cols-[minmax(360px,0.95fr)_minmax(520px,1.05fr)]">
