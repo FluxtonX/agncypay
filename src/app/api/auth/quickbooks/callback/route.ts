@@ -2,7 +2,12 @@ import { NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
 
-const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:3001/api/v1";
+// Use NEXT_PUBLIC_API_BASE_URL (already set in Vercel) as primary,
+// BACKEND_URL as secondary, then localhost as dev fallback
+const BACKEND_URL =
+  process.env.NEXT_PUBLIC_API_BASE_URL ||
+  process.env.BACKEND_URL ||
+  "http://localhost:3001/api/v1";
 
 /**
  * QuickBooks OAuth callback.
