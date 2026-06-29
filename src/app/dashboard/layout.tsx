@@ -14,18 +14,53 @@ import {
   Menu,
   X,
   ChevronDown,
+  ChevronRight,
   Briefcase,
   Link2,
   Loader2,
+  ArrowDownLeft,
+  ArrowUpRight,
 } from "lucide-react";
 import { Button } from "@/shared/components/ui/Button";
+import { cn } from "@/shared/lib/utils";
+import { useAccounting } from "@/modules/accounting/hooks/useAccounting";
+import { ProviderType } from "@/modules/accounting/types";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { state, logout, switchWorkspace, isInitialized } = useApp();
+  const { connectionStatuses, providerErrors, fetchData, currentProvider } = useAccounting();
   const router = useRouter();
   const pathname = usePathname();
+  
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showWorkspaceDropdown, setShowWorkspaceDropdown] = useState(false);
+  
+  // Providers collapsible state
+  const [expandedProviders, setExpandedProviders] = useState<Record<string, boolean>>({
+    quickbooks: true,
+    xero: false,
+    sage: false,
+  });
+
+  // Sync open provider state when route changes
+  useEffect(() => {
+    const parts = pathname.split("/");
+    const idx = parts.indexOf("providers");
+    if (idx !== -1 && idx + 1 < parts.length) {
+      const activeP = parts[idx + 1];
+      setExpandedProviders((prev) => ({
+        ...prev,
+        [activeP]: true,
+      }));
+    }
+  }, [pathname]);
+
+  const toggleProvider = (p: string) => {
+    setExpandedProviders((prev) => ({
+      ...prev,
+      [p]: !prev[p],
+    }));
+  };
 
   // Authentication guard
   useEffect(() => {
@@ -46,15 +81,200 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const activeWorkspace = state.workspaces.find((ws) => ws.id === state.activeWorkspaceId);
   const userRole = state.user?.role || "brand";
 
-  const navigationItems = [
-    { name: "Overview", href: "/dashboard", icon: LayoutDashboard },
-    { name: "Invoices", href: "/dashboard/invoices", icon: Receipt },
+  const providerList = [
+    { id: "quickbooks", name: "QuickBooks", color: "#2CA01C" },
+    { id: "xero", name: "Xero", color: "#13B5EA" },
+    { id: "sage", name: "Sage", color: "#00783C", isFuture: true },
+  ];
+
+  const subItems = [
+    { name: "Dashboard", hrefSuffix: "dashboard", icon: LayoutDashboard },
+    { name: "Invoices", hrefSuffix: "invoices", icon: Receipt },
+    { name: "Income", hrefSuffix: "income", icon: ArrowDownLeft },
+    { name: "Payouts", hrefSuffix: "payouts", icon: ArrowUpRight },
+  ];
+
+  const globalNavigationItems = [
     { name: "Split Payments", href: "/dashboard/splits", icon: GitFork },
     { name: "Team Settings", href: "/dashboard/team", icon: Users },
     ...(userRole !== "talent"
       ? [{ name: "Integrations", href: "/dashboard/integrations", icon: Link2 }]
       : []),
   ];
+
+  const renderTopbarStatus = () => {
+    const isConnected = !!connectionStatuses[currentProvider]?.connected;
+    const hasError = !!providerErrors[currentProvider];
+    const errorMessage = providerErrors[currentProvider];
+    const providerName = providerList.find((p) => p.id === currentProvider)?.name || "Provider";
+
+    if (hasError) {
+      return (
+        <div className="flex items-center gap-2 rounded-full border border-red-500/20 bg-red-500/5 px-3.5 py-1 text-[11px] font-bold text-red-400">
+          <span className="h-1.5 w-1.5 rounded-full bg-red-500 animate-pulse" />
+          <span className="max-w-[280px] truncate">{providerName} Sync Error: {errorMessage}</span>
+          <button 
+            onClick={() => fetchData()}
+            className="ml-1.5 text-[10px] font-bold text-white hover:text-red-300 underline cursor-pointer shrink-0"
+          >
+            Retry
+          </button>
+        </div>
+      );
+    }
+
+    if (isConnected) {
+      const activeColor = providerList.find((p) => p.id === currentProvider)?.color || "#10b981";
+      return (
+        <div className="flex items-center gap-2 rounded-full border border-[#3a3a3a] bg-white/[0.02] px-3.5 py-1 text-[11px] font-bold text-neutral-300">
+          <span 
+            className="h-1.5 w-1.5 rounded-full" 
+            style={{ backgroundColor: activeColor }}
+          />
+          {providerName} Connected
+        </div>
+      );
+    }
+
+    return (
+      <div className="flex items-center gap-2 rounded-full border border-[#3a3a3a] bg-white/[0.02] px-3.5 py-1 text-[11px] font-bold text-neutral-500">
+        <span className="h-1.5 w-1.5 rounded-full bg-neutral-700" />
+        {providerName} Disconnected
+      </div>
+    );
+  };
+
+  const renderNavList = (onItemClick?: () => void) => {
+    return (
+      <div className="space-y-4">
+        {/* Providers Section */}
+        <div>
+          <span className="block px-3.5 mb-2 text-[10px] font-bold uppercase tracking-wider text-neutral-500">
+            Accounting Providers
+          </span>
+          <div className="space-y-1.5">
+            {providerList.map((p) => {
+              const isExpanded = expandedProviders[p.id];
+              const isConnected = !!connectionStatuses[p.id as ProviderType]?.connected;
+              const hasError = !!providerErrors[p.id as ProviderType];
+              const errorMessage = providerErrors[p.id as ProviderType];
+              
+              return (
+                <div key={p.id} className="space-y-1">
+                  {/* Provider Header Button */}
+                  <button
+                    onClick={() => toggleProvider(p.id)}
+                    className="flex w-full items-center justify-between rounded-lg px-3.5 py-2.5 text-xs font-bold text-neutral-400 hover:bg-white/[0.03] hover:text-white transition-all cursor-pointer"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      {/* Connection indicator dot */}
+                      <span
+                        className={cn(
+                          "h-2 w-2 rounded-full transition-all duration-300",
+                          hasError 
+                            ? "bg-red-500 animate-pulse" 
+                            : isConnected 
+                            ? "bg-emerald-500" 
+                            : "bg-neutral-700"
+                        )}
+                        style={isConnected && !hasError ? { backgroundColor: p.color } : undefined}
+                        title={hasError ? errorMessage || "Failed to load status" : undefined}
+                      />
+                      <span>
+                        {p.name} {p.isFuture && <span className="text-[9px] font-semibold text-neutral-600 font-sans ml-0.5">(Future)</span>}
+                      </span>
+                    </div>
+                    {isExpanded ? (
+                      <ChevronDown className="h-3.5 w-3.5 text-neutral-500" />
+                    ) : (
+                      <ChevronRight className="h-3.5 w-3.5 text-neutral-500" />
+                    )}
+                  </button>
+
+                  {/* Render error description underneath name if sync fails */}
+                  {hasError && (
+                    <span 
+                      className="block text-[9px] font-bold text-red-500/80 pl-8 pb-1 max-w-[210px] truncate"
+                      title={errorMessage || "Failed to load status"}
+                    >
+                      ⚠️ {errorMessage}
+                    </span>
+                  )}
+
+                  {/* Provider Sub-items */}
+                  {isExpanded && (
+                    <div className="space-y-1 pl-4 border-l border-[#222] ml-4 animate-in fade-in slide-in-from-top-1 duration-150">
+                      {subItems.map((sub) => {
+                        const targetHref = `/providers/${p.id}/${sub.hrefSuffix}`;
+                        const isActive = pathname === targetHref;
+                        const SubIcon = sub.icon;
+
+                        let activeStyle = "bg-white text-black hover:bg-neutral-200";
+                        if (isActive) {
+                          if (p.id === "quickbooks") {
+                            activeStyle = "bg-[#2CA01C]/10 text-white border-l border-[#2CA01C]";
+                          } else if (p.id === "xero") {
+                            activeStyle = "bg-[#13B5EA]/10 text-white border-l border-[#13B5EA]";
+                          } else if (p.id === "sage") {
+                            activeStyle = "bg-[#00783C]/10 text-white border-l border-[#00783C]";
+                          }
+                        }
+
+                        return (
+                          <Link
+                            key={sub.name}
+                            href={targetHref}
+                            onClick={onItemClick}
+                            className={cn(
+                              "flex items-center gap-2.5 rounded-md px-3 py-2 text-[11px] font-bold transition-all",
+                              isActive
+                                ? activeStyle
+                                : "text-neutral-500 hover:text-white hover:bg-white/[0.02]"
+                            )}
+                          >
+                            <SubIcon className="h-3.5 w-3.5 shrink-0" />
+                            {sub.name}
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Global Platform Section */}
+        <div className="border-t border-[#1a1a1a] pt-4">
+          <span className="block px-3.5 mb-2 text-[10px] font-bold uppercase tracking-wider text-neutral-500">
+            Platform Core
+          </span>
+          <div className="space-y-1.5">
+            {globalNavigationItems.map((item) => {
+              const Icon = item.icon;
+              const isActive = pathname === item.href;
+              return (
+                <Link
+                  key={item.name}
+                  href={item.href}
+                  onClick={onItemClick}
+                  className={`flex items-center gap-3 rounded-lg px-3.5 py-2.5 text-xs font-bold transition-all hover:text-white ${
+                    isActive
+                      ? "bg-white text-black hover:bg-neutral-200"
+                      : "text-neutral-400 hover:bg-white/[0.03]"
+                  }`}
+                >
+                  <Icon className="h-4 w-4 shrink-0" />
+                  {item.name}
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="flex h-screen w-full bg-black text-white overflow-hidden font-sans select-none font-medium">
@@ -112,25 +332,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </div>
 
         {/* Sidebar Nav */}
-        <nav className="flex-1 space-y-1.5">
-          {navigationItems.map((item) => {
-            const Icon = item.icon;
-            const isActive = pathname === item.href;
-            return (
-              <Link
-                key={item.name}
-                href={item.href}
-                className={`flex items-center gap-3 rounded-lg px-3.5 py-2.5 text-xs font-bold transition-all hover:text-white ${
-                  isActive
-                    ? "bg-white text-black hover:bg-neutral-200"
-                    : "text-neutral-400 hover:bg-white/[0.03]"
-                }`}
-              >
-                <Icon className="h-4 w-4 shrink-0" />
-                {item.name}
-              </Link>
-            );
-          })}
+        <nav className="flex-1 overflow-y-auto pr-1">
+          {renderNavList()}
         </nav>
 
         {/* User Footer */}
@@ -175,10 +378,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </div>
 
           <div className="flex items-center gap-4">
-            <div className="hidden items-center gap-2 rounded-full border border-[#3a3a3a] bg-white/[0.02] px-3.5 py-1 text-[11px] font-bold sm:flex">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-              API Connected
-            </div>
+            {renderTopbarStatus()}
           </div>
         </header>
 
@@ -218,26 +418,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </div>
 
             {/* Sidebar Nav */}
-            <nav className="space-y-1.5 flex-1">
-              {navigationItems.map((item) => {
-                const Icon = item.icon;
-                const isActive = pathname === item.href;
-                return (
-                  <Link
-                    key={item.name}
-                    href={item.href}
-                    onClick={() => setMobileMenuOpen(false)}
-                    className={`flex items-center gap-3 rounded-lg px-3.5 py-2.5 text-xs font-bold transition-all ${
-                      isActive
-                        ? "bg-white text-black"
-                        : "text-neutral-400 hover:bg-white/[0.03]"
-                    }`}
-                  >
-                    <Icon className="h-4 w-4 shrink-0" />
-                    {item.name}
-                  </Link>
-                );
-              })}
+            <nav className="flex-1 overflow-y-auto pr-1">
+              {renderNavList(() => setMobileMenuOpen(false))}
             </nav>
 
             {/* User Footer */}
