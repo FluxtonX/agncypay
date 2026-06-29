@@ -13,13 +13,77 @@ export async function GET(
   try {
     const { id } = await params;
     const authHeader = req.headers.get("Authorization") || "";
+    
+    console.log(`[Proxy] GET /api/payments/${id}`);
+    console.log(`[Proxy] BACKEND_URL: ${BACKEND_URL}`);
+    
     const res = await fetch(`${BACKEND_URL}/payments/${id}`, {
       headers: { Authorization: authHeader },
+      cache: "no-store",
     });
+    
+    console.log(`[Proxy] Local backend response status: ${res.status}`);
+    
+    if (res.ok) {
+      const data = await res.json();
+      return NextResponse.json(data, { status: res.status });
+    }
+
+    // Fallback: Check if it is a QuickBooks invoice
+    try {
+      console.log(`[Proxy] Local payment not found. Querying QuickBooks invoices as fallback...`);
+      const qbRes = await fetch(`${BACKEND_URL}/quickbooks/invoices`, {
+        cache: "no-store",
+      });
+      
+      console.log(`[Proxy] QuickBooks invoices response status: ${qbRes.status}`);
+      
+      if (qbRes.ok) {
+        const qbData = await qbRes.json();
+        console.log(`[Proxy] QuickBooks invoices count: ${qbData.invoices?.length}`);
+        
+        const qbInvoice = qbData.invoices?.find((inv: any) => {
+          // Compare both invoice string ID and document number
+          return String(inv.id) === String(id) || String(inv.docNumber) === String(id);
+        });
+        
+        if (qbInvoice) {
+          console.log(`[Proxy] Found matching QuickBooks invoice:`, qbInvoice);
+          const mappedPayment = {
+            id: qbInvoice.id,
+            invoiceId: qbInvoice.docNumber,
+            externalId: `QBO-${qbInvoice.id}`,
+            source: "QUICKBOOKS",
+            amount: qbInvoice.amount.toString(),
+            currency: "USD",
+            status: qbInvoice.status === "Paid" ? "SETTLED" : "PENDING",
+            settledAmount: qbInvoice.status === "Paid" ? qbInvoice.amount.toString() : null,
+            settledAt: null,
+            invoiceData: {
+              clientName: qbInvoice.name,
+              description: qbInvoice.detail,
+              dueDate: qbInvoice.date,
+            },
+            description: qbInvoice.detail,
+            metadata: null,
+            splits: [],
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            walletId: "",
+          };
+          return NextResponse.json({ success: true, data: mappedPayment }, { status: 200 });
+        } else {
+          console.log(`[Proxy] QuickBooks invoice not found for ID: ${id}`);
+        }
+      }
+    } catch (fallbackError: any) {
+      console.error("[Proxy] QuickBooks fallback lookup failed:", fallbackError.message);
+    }
+
     const data = await res.json();
     return NextResponse.json(data, { status: res.status });
   } catch (error: any) {
-    console.error("Proxy error [payments/id]:", error.message);
+    console.error("[Proxy] Proxy error [payments/id]:", error.message);
     return NextResponse.json({ message: "Failed to reach server." }, { status: 502 });
   }
 }

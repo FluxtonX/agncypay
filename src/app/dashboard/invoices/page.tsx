@@ -16,7 +16,13 @@ import {
   AlertCircle,
   CheckCircle2,
   Trash2,
+  ChevronDown,
+  ChevronRight,
+  Loader2,
+  ChevronLeft,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
 
 // Form validation schema using Zod
 const invoiceFormSchema = z.object({
@@ -63,11 +69,89 @@ interface BackendPayment {
 
 export default function InvoicesPage() {
   const { state } = useApp();
+  const router = useRouter();
   const [payments, setPayments] = useState<BackendPayment[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+  // QuickBooks Invoices States
+  const [qbInvoices, setQbInvoices] = useState<QBInvoice[]>([]);
+  const [loadingQb, setLoadingQb] = useState(true);
+  const [qbConnected, setQbConnected] = useState(false);
+  const [qbError, setQbError] = useState<string | null>(null);
+  const [expandedNames, setExpandedNames] = useState<string[]>([]);
+
+  interface QBInvoice {
+    id: string;
+    docNumber: string;
+    name: string;
+    detail: string;
+    date: string;
+    amount: number;
+    status: string;
+    daysText: string;
+  }
+
+  interface GroupedQBInvoice {
+    name: string;
+    totalAmount: number;
+    status: "Paid" | "Pending";
+    latestDate: string;
+    items: QBInvoice[];
+  }
+
+  const fetchQbInvoices = useCallback(async () => {
+    try {
+      const res = await fetch("/api/quickbooks/invoices", { cache: "no-store" });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body?.error?.message || body?.message || "Failed to fetch QuickBooks invoices.");
+      startTransition(() => {
+        setQbConnected(body.connected ?? false);
+        setQbInvoices(body.invoices || []);
+      });
+    } catch (err: any) {
+      startTransition(() => setQbError(err.message || "Failed to load QuickBooks invoices."));
+    } finally {
+      startTransition(() => setLoadingQb(false));
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchQbInvoices();
+  }, [fetchQbInvoices]);
+
+  const toggleExpand = (name: string) => {
+    setExpandedNames((prev) =>
+      prev.includes(name) ? prev.filter((n) => n !== name) : [...prev, name]
+    );
+  };
+
+  const groupedQbInvoices = React.useMemo(() => {
+    const groups: { [key: string]: GroupedQBInvoice } = {};
+    qbInvoices.forEach((inv) => {
+      if (!groups[inv.name]) {
+        groups[inv.name] = {
+          name: inv.name,
+          totalAmount: 0,
+          status: "Paid",
+          latestDate: inv.date,
+          items: [],
+        };
+      }
+      const g = groups[inv.name];
+      g.totalAmount += inv.amount;
+      g.items.push(inv);
+      if (inv.status === "Pending") {
+        g.status = "Pending";
+      }
+      if (new Date(inv.date) > new Date(g.latestDate)) {
+        g.latestDate = inv.date;
+      }
+    });
+    return Object.values(groups).sort((a, b) => b.totalAmount - a.totalAmount);
+  }, [qbInvoices]);
 
   const {
     register,
@@ -181,11 +265,19 @@ export default function InvoicesPage() {
 
   return (
     <div className="space-y-6 select-text">
+      {/* Back Button */}
+      <div>
+        <Link 
+          href="/dashboard" 
+          className="inline-flex items-center gap-1 text-xs font-bold text-neutral-500 hover:text-white transition-colors"
+        >
+          <ChevronLeft className="h-4 w-4" />
+          Back to Dashboard
+        </Link>
+      </div>
+
       {/* Upper header action */}
       <div className="flex justify-between items-center">
-         
-         
-
         <div>
           <h2 className="text-xl font-bold tracking-tight text-white">Invoices & Deposits</h2>
           <p className="text-xs font-semibold text-neutral-400 mt-1">
@@ -268,6 +360,162 @@ export default function InvoicesPage() {
                     </td>
                   </tr>
                 ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+
+      {/* QuickBooks Synced Invoices Card */}
+      <Card className="p-6">
+        <div className="flex justify-between items-center mb-6">
+          <div>
+            <h3 className="text-xs font-bold uppercase tracking-wider text-neutral-400">
+              QuickBooks Synced Invoices
+            </h3>
+            <p className="text-[10px] text-neutral-500 mt-1">Grouped by platform client. Click a row to expand invoices.</p>
+          </div>
+        </div>
+
+        {loadingQb ? (
+          <div className="flex flex-col items-center justify-center py-12">
+            <Loader2 className="h-8 w-8 text-neutral-500 animate-spin mb-3" />
+            <p className="text-xs text-neutral-500">Querying QuickBooks invoices...</p>
+          </div>
+        ) : qbError ? (
+          <div className="text-xs text-red-400 font-medium py-6 text-center">{qbError}</div>
+        ) : !qbConnected ? (
+          <div className="flex flex-col items-center justify-center text-center py-16 border border-dashed border-[#3a3a3a] rounded-xl bg-white/[0.01]">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/quickbook.png" alt="QuickBooks" className="h-10 w-10 object-contain mb-4 opacity-40" />
+            <h4 className="text-sm font-bold text-white mb-1">QuickBooks is not connected</h4>
+            <p className="text-xs text-neutral-400 max-w-[280px] leading-relaxed mb-6">
+              Connect QuickBooks integration to view and settle your invoices.
+            </p>
+            <Link href="/dashboard/integrations">
+              <Button className="h-9 px-4 text-xs font-bold">Connect QuickBooks</Button>
+            </Link>
+          </div>
+        ) : groupedQbInvoices.length === 0 ? (
+          <div className="flex flex-col items-center justify-center text-center py-16 border border-dashed border-[#3a3a3a] rounded-xl bg-white/[0.01]">
+            <FileText className="h-10 w-10 text-neutral-600 mb-4 stroke-[1.5]" />
+            <h4 className="text-sm font-bold text-white mb-1">No QuickBooks invoices found</h4>
+            <p className="text-xs text-neutral-400 max-w-[280px]">
+              No active invoices found in your QuickBooks workspace.
+            </p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs font-semibold text-neutral-300">
+              <thead>
+                <tr className="border-b border-[#3a3a3a] pb-3 text-neutral-500">
+                  <th className="py-3 pl-2 w-8"></th>
+                  <th className="py-3">Platform / Client</th>
+                  <th className="py-3">Invoice Count</th>
+                  <th className="py-3">Latest Date</th>
+                  <th className="py-3">Total Amount</th>
+                  <th className="py-3 text-right pr-2">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#3a3a3a]">
+                {groupedQbInvoices.map((group) => {
+                  const isExpanded = expandedNames.includes(group.name);
+                  return (
+                    <React.Fragment key={group.name}>
+                      <tr
+                        onClick={() => toggleExpand(group.name)}
+                        className="hover:bg-white/[0.01] transition-colors cursor-pointer select-none"
+                      >
+                        <td className="py-4 pl-2 text-neutral-500">
+                          {isExpanded ? (
+                            <ChevronDown className="h-4 w-4" />
+                          ) : (
+                            <ChevronRight className="h-4 w-4" />
+                          )}
+                        </td>
+                        <td className="py-4 font-bold text-white">
+                          <div className="flex items-center gap-2">
+                            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded bg-neutral-900 border border-[#2a2a2a] p-1">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img src="/quickbook.png" alt="QB" className="h-full w-full object-contain" />
+                            </div>
+                            {group.name}
+                          </div>
+                        </td>
+                        <td className="py-4 text-neutral-400">{group.items.length} invoice{group.items.length !== 1 ? "s" : ""}</td>
+                        <td className="py-4 text-neutral-500">{group.latestDate}</td>
+                        <td className="py-4 text-white font-mono">
+                          ${group.totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                        </td>
+                        <td className="py-4 text-right pr-2">
+                          <Badge
+                            variant={group.status === "Paid" ? "success" : "warning"}
+                            className="capitalize"
+                          >
+                            {group.status.toLowerCase()}
+                          </Badge>
+                        </td>
+                      </tr>
+
+                      {isExpanded && (
+                        <tr>
+                          <td colSpan={6} className="bg-neutral-950/40 p-4 border-t border-[#222]">
+                            <div className="rounded-lg border border-[#2a2a2a] bg-black/60 overflow-hidden">
+                              <table className="w-full text-left text-[11px] text-neutral-400">
+                                <thead>
+                                  <tr className="border-b border-[#2a2a2a] bg-neutral-900/50 text-neutral-500">
+                                    <th className="px-4 py-2">Invoice ID</th>
+                                    <th className="px-4 py-2">Detail</th>
+                                    <th className="px-4 py-2">Date Created</th>
+                                    <th className="px-4 py-2">Due Status</th>
+                                    <th className="px-4 py-2">Amount</th>
+                                    <th className="px-4 py-2">Status</th>
+                                    <th className="px-4 py-2 text-right pr-4">Action</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-[#2a2a2a]">
+                                  {group.items.map((item) => (
+                                    <tr key={item.id} className="hover:bg-white/[0.01]">
+                                      <td className="px-4 py-2.5 font-mono text-white">#{item.docNumber}</td>
+                                      <td className="px-4 py-2.5 max-w-[200px] truncate">{item.detail}</td>
+                                      <td className="px-4 py-2.5">{item.date}</td>
+                                      <td className="px-4 py-2.5 text-neutral-500">{item.daysText}</td>
+                                      <td className="px-4 py-2.5 font-mono text-white">${item.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                                      <td className="px-4 py-2.5">
+                                        <Badge
+                                          variant={item.status === "Paid" ? "success" : "warning"}
+                                          className="text-[9px] px-1.5 py-0 capitalize"
+                                        >
+                                          {item.status.toLowerCase()}
+                                        </Badge>
+                                      </td>
+                                      <td className="px-4 py-2.5 text-right pr-4">
+                                        {item.status === "Pending" ? (
+                                          <button
+                                            type="button"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              router.push(`/dashboard/pay-flow/${item.id}`);
+                                            }}
+                                            className="h-6 px-2.5 bg-white text-black hover:bg-neutral-200 font-bold rounded text-[10px] transition-all cursor-pointer inline-flex items-center justify-center hover:scale-[1.02] active:scale-[0.98]"
+                                          >
+                                            Pay Now
+                                          </button>
+                                        ) : (
+                                          <span className="text-[10px] text-neutral-600 font-medium">No action</span>
+                                        )}
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  );
+                })}
               </tbody>
             </table>
           </div>

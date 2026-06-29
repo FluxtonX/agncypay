@@ -243,10 +243,10 @@ export function PayFlowPage({ id }: { id: string }) {
                 },
               ].map((item, i) => (
                 <div key={i} className="flex gap-3 text-xs">
-                  <Clock className="h-3.5 w-3.5 text-violet-400 mt-0.5 shrink-0" />
+                  <Clock className="h-3.5 w-3.5 text-emerald-400 mt-0.5 shrink-0" />
                   <div>
                     <p className="font-bold text-white">{item.time}</p>
-                    <p className="text-neutral-400">{item.label}</p>
+                    <p className="text-emerald-400">{item.label}</p>
                   </div>
                 </div>
               ))}
@@ -306,7 +306,7 @@ export function PayFlowPage({ id }: { id: string }) {
                 className="flex items-center gap-3 rounded-lg p-3 min-h-[54px]"
                 style={{ border: "1px solid rgba(255,255,255,0.08)", background: "#1A1A1A" }}
               >
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-violet-600 to-indigo-600 text-sm font-black text-white">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 text-sm font-black text-white">
                   {(payment.invoiceData?.clientName || "A")[0].toUpperCase()}
                 </div>
                 <div className="min-w-0 flex-1">

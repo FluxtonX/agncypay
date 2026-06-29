@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useCallback, startTransition } from "react";
 import Link from "next/link";
-import { ChevronLeft, Download, Search, Loader2, Landmark, RefreshCw } from "lucide-react";
+import { ChevronLeft, Download, Search, Loader2, Landmark, RefreshCw, ChevronDown, ChevronRight } from "lucide-react";
 import { Badge } from "@/shared/components/ui/Badge";
 
 interface QBPayout {
@@ -28,6 +28,44 @@ export default function AllPayoutsPage() {
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"All" | "Paid" | "Pending" | "Failed">("All");
+  const [expandedNames, setExpandedNames] = useState<string[]>([]);
+
+  interface GroupedQBPayout {
+    name: string;
+    totalAmount: number;
+    fallback: string;
+    latestDate: string;
+    items: QBPayout[];
+  }
+
+  const toggleExpand = (name: string) => {
+    setExpandedNames((prev) =>
+      prev.includes(name) ? prev.filter((n) => n !== name) : [...prev, name]
+    );
+  };
+
+  const groupedPayouts = React.useMemo(() => {
+    const groups: { [key: string]: GroupedQBPayout } = {};
+    filtered.forEach((p) => {
+      if (!groups[p.name]) {
+        groups[p.name] = {
+          name: p.name,
+          totalAmount: 0,
+          fallback: p.fallback,
+          latestDate: p.date,
+          items: [],
+        };
+      }
+      const g = groups[p.name];
+      const num = Number(p.amount.replace(/[^0-9.-]+/g, ""));
+      g.totalAmount += isNaN(num) ? 0 : num;
+      g.items.push(p);
+      if (new Date(p.date) > new Date(g.latestDate)) {
+        g.latestDate = p.date;
+      }
+    });
+    return Object.values(groups).sort((a, b) => b.totalAmount - a.totalAmount);
+  }, [filtered]);
 
   const fetchPayouts = useCallback(async () => {
     setLoading(true);
@@ -186,50 +224,98 @@ export default function AllPayoutsPage() {
               <table className="w-full min-w-[760px] text-left">
                 <thead>
                   <tr className="border-b border-[#222]">
+                    <th className="px-5 py-3.5 text-[11px] font-bold uppercase tracking-wider text-neutral-500 w-8 pl-2"></th>
                     <th className="px-5 py-3.5 text-[11px] font-bold uppercase tracking-wider text-neutral-500">Recipient</th>
-                    <th className="px-4 py-3.5 text-[11px] font-bold uppercase tracking-wider text-neutral-500">Detail</th>
-                    <th className="px-4 py-3.5 text-[11px] font-bold uppercase tracking-wider text-neutral-500">Method</th>
-                    <th className="px-4 py-3.5 text-[11px] font-bold uppercase tracking-wider text-neutral-500">Status</th>
-                    <th className="px-4 py-3.5 text-[11px] font-bold uppercase tracking-wider text-neutral-500">Date</th>
-                    <th className="px-5 py-3.5 text-[11px] font-bold uppercase tracking-wider text-neutral-500 text-right">Amount</th>
+                    <th className="px-4 py-3.5 text-[11px] font-bold uppercase tracking-wider text-neutral-500">Payout Count</th>
+                    <th className="px-4 py-3.5 text-[11px] font-bold uppercase tracking-wider text-neutral-500">Latest Date</th>
+                    <th className="px-5 py-3.5 text-[11px] font-bold uppercase tracking-wider text-neutral-500 text-right pr-6">Total Amount</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#1a1a1a]">
-                  {filtered.length === 0 ? (
+                  {groupedPayouts.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="py-16 text-center">
+                      <td colSpan={5} className="py-16 text-center">
                         <Landmark className="h-8 w-8 text-neutral-700 mx-auto mb-2" />
                         <p className="text-sm text-neutral-500">No payouts match your search.</p>
                       </td>
                     </tr>
                   ) : (
-                    filtered.map((payout) => (
-                      <tr key={payout.id} className="group transition-colors hover:bg-white/[0.02]">
-                        <td className="px-5 py-4">
-                          <div className="flex items-center gap-3 min-w-0">
-                            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-neutral-900 border border-[#2a2a2a] font-bold text-xs text-amber-400">
-                              {payout.fallback}
-                            </div>
-                            <div className="min-w-0">
-                              <p className="truncate text-[13px] font-semibold text-white max-w-[180px]">{payout.name}</p>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="px-4 py-4 text-[13px] text-neutral-400 max-w-[160px] truncate">{payout.detail}</td>
-                        <td className="px-4 py-4 text-[13px] text-neutral-400 whitespace-nowrap">{payout.method}</td>
-                        <td className="px-4 py-4">
-                          <Badge variant={badgeVariant(payout.status)} className="text-[10px] px-2 py-0.5 capitalize">
-                            {payout.status}
-                          </Badge>
-                        </td>
-                        <td className="px-4 py-4 text-[13px] text-neutral-400 whitespace-nowrap">{payout.date}</td>
-                        <td className="px-5 py-4 text-right">
-                          <span className="font-mono text-[13px] font-bold text-white">
-                            -{payout.amount}
-                          </span>
-                        </td>
-                      </tr>
-                    ))
+                    groupedPayouts.map((group) => {
+                      const isExpanded = expandedNames.includes(group.name);
+                      return (
+                        <React.Fragment key={group.name}>
+                          <tr
+                            onClick={() => toggleExpand(group.name)}
+                            className="group transition-colors hover:bg-white/[0.02] cursor-pointer select-none"
+                          >
+                            <td className="py-4 pl-2 text-neutral-500">
+                              {isExpanded ? (
+                                <ChevronDown className="h-4 w-4" />
+                              ) : (
+                                <ChevronRight className="h-4 w-4" />
+                              )}
+                            </td>
+                            <td className="px-5 py-4">
+                              <div className="flex items-center gap-3 min-w-0">
+                                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-neutral-900 border border-[#2a2a2a] font-bold text-xs text-amber-400">
+                                  {group.fallback}
+                                </div>
+                                <div className="min-w-0">
+                                  <p className="truncate text-[13px] font-semibold text-white max-w-[180px]">{group.name}</p>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-4 py-4 text-[13px] text-neutral-400">{group.items.length} payout{group.items.length !== 1 ? "s" : ""}</td>
+                            <td className="px-4 py-4 text-[13px] text-neutral-400 whitespace-nowrap">{group.latestDate}</td>
+                            <td className="px-5 py-4 text-right pr-6">
+                              <span className="font-mono text-[13px] font-bold text-white">
+                                -${group.totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                              </span>
+                            </td>
+                          </tr>
+
+                          {isExpanded && (
+                            <tr>
+                              <td colSpan={5} className="bg-neutral-950/40 p-4 border-t border-[#222]">
+                                <div className="rounded-lg border border-[#2a2a2a] bg-black/65 overflow-hidden">
+                                  <table className="w-full text-left text-[11px] text-neutral-400">
+                                    <thead>
+                                      <tr className="border-b border-[#2a2a2a] bg-neutral-900/50 text-neutral-500">
+                                        <th className="px-4 py-2">Detail</th>
+                                        <th className="px-4 py-2">Method</th>
+                                        <th className="px-4 py-2">Date Created</th>
+                                        <th className="px-4 py-2">Status</th>
+                                        <th className="px-4 py-2 text-right pr-4">Amount</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-[#2a2a2a]">
+                                      {group.items.map((item) => (
+                                        <tr key={item.id} className="hover:bg-white/[0.01]">
+                                          <td className="px-4 py-2.5 max-w-[220px] truncate">{item.detail}</td>
+                                          <td className="px-4 py-2.5">{item.method}</td>
+                                          <td className="px-4 py-2.5">{item.date}</td>
+                                          <td className="px-4 py-2.5">
+                                            <Badge
+                                              variant={badgeVariant(item.status)}
+                                              className="text-[9px] px-1.5 py-0 capitalize"
+                                            >
+                                              {item.status.toLowerCase()}
+                                            </Badge>
+                                          </td>
+                                          <td className="px-4 py-2.5 text-right pr-4 font-mono text-white">
+                                            -{item.amount}
+                                          </td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </React.Fragment>
+                      );
+                    })
                   )}
                 </tbody>
               </table>
