@@ -20,7 +20,16 @@ export async function GET(request: Request) {
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       console.error("Xero OAuth exchange failed:", err);
-      return NextResponse.json({ error: "Failed to authenticate with Xero." }, { status: 500 });
+      return NextResponse.json(
+        {
+          error: "Failed to authenticate with Xero.",
+          message: err.message || "Unknown exchange error",
+          detail: err.detail || err,
+          xeroStatus: err.xeroStatus,
+          xeroResponse: err.xeroResponse,
+        },
+        { status: res.status }
+      );
     }
 
     console.log("Xero connection successful!");
