@@ -171,48 +171,69 @@ export default function IntegrationsPage() {
   const [providers, setProviders] = useState<ERPProvider[]>(defaultProviders);
   const [activeOAuth, setActiveOAuth] = useState<ERPProvider | null>(null);
   const [checkingQuickBooks, setCheckingQuickBooks] = useState(true);
+  const [checkingXero, setCheckingXero] = useState(true);
   const [disconnectingId, setDisconnectingId] = useState<string | null>(null);
 
   const connectQuickBooks = () => {
     window.location.assign("/api/auth/quickbooks/connect");
   };
 
-  const refreshQuickBooksStatus = useCallback(async () => {
+  const connectXero = () => {
+    window.location.assign("/api/auth/xero/connect");
+  };
+
+  const refreshStatuses = useCallback(async () => {
     setCheckingQuickBooks(true);
+    setCheckingXero(true);
     const mockConnectedIds = readMockConnectedProviderIds();
 
+    // Check QuickBooks Status
+    let qbConnected = false;
     try {
       const res = await fetch("/api/quickbooks/status", { cache: "no-store" });
       if (res.ok) {
         const data = await res.json();
-        setProviders(current =>
-          current.map(p => 
-            p.id === "quickbooks" 
-              ? { ...p, status: data.connected ? "Connected" : "Not Connected" } 
-              : { ...p, status: mockConnectedIds.has(p.id) ? "Connected" : "Not Connected" }
-          )
-        );
+        qbConnected = !!data.connected;
       }
     } catch (err) {
       console.error("Failed to fetch QuickBooks status:", err);
-      setProviders(current =>
-        current.map(p =>
-          p.id === "quickbooks"
-            ? p
-            : { ...p, status: mockConnectedIds.has(p.id) ? "Connected" : "Not Connected" }
-        )
-      );
     } finally {
       setCheckingQuickBooks(false);
     }
+
+    // Check Xero Status
+    let xeroConnected = false;
+    try {
+      const res = await fetch("/api/xero/status", { cache: "no-store" });
+      if (res.ok) {
+        const data = await res.json();
+        xeroConnected = !!data.connected;
+      }
+    } catch (err) {
+      console.error("Failed to fetch Xero status:", err);
+    } finally {
+      setCheckingXero(false);
+    }
+
+    setProviders(current =>
+      current.map(p => {
+        if (p.id === "quickbooks") {
+          return { ...p, status: qbConnected ? "Connected" : "Not Connected" };
+        }
+        if (p.id === "xero") {
+          return { ...p, status: xeroConnected ? "Connected" : "Not Connected" };
+        }
+        return { ...p, status: mockConnectedIds.has(p.id) ? "Connected" : "Not Connected" };
+      })
+    );
   }, []);
 
   useEffect(() => {
-    refreshQuickBooksStatus();
-  }, [refreshQuickBooksStatus]);
+    refreshStatuses();
+  }, [refreshStatuses]);
 
   const handleConnectSuccess = (providerId: string) => {
-    if (providerId !== "quickbooks") {
+    if (providerId !== "quickbooks" && providerId !== "xero") {
       writeMockConnectedProviderId(providerId, true);
     }
 
@@ -231,7 +252,11 @@ export default function IntegrationsPage() {
       if (provider.id === "quickbooks") {
         const res = await fetch("/api/quickbooks/disconnect", { method: "POST" });
         if (!res.ok) throw new Error("Failed to disconnect QuickBooks.");
-        await refreshQuickBooksStatus();
+        await refreshStatuses();
+      } else if (provider.id === "xero") {
+        const res = await fetch("/api/xero/disconnect", { method: "POST" });
+        if (!res.ok) throw new Error("Failed to disconnect Xero.");
+        await refreshStatuses();
       } else {
         writeMockConnectedProviderId(provider.id, false);
         setProviders(current =>
@@ -271,7 +296,7 @@ export default function IntegrationsPage() {
                     <CheckCircle2 className="h-[14px] w-[14px] text-green-500" />
                     <span className="text-[12px] font-bold text-green-500">Connected</span>
                   </div>
-                ) : checkingQuickBooks && provider.id === "quickbooks" ? (
+                ) : (checkingQuickBooks && provider.id === "quickbooks") || (checkingXero && provider.id === "xero") ? (
                   <div className="flex items-center gap-[6px] rounded-full border border-[#3a3a3a] bg-[#222] px-[10px] py-[4px]">
                     <Loader2 className="h-[14px] w-[14px] animate-spin text-[#9b9b9b]" />
                     <span className="text-[12px] font-bold text-[#9b9b9b]">Checking</span>
@@ -295,7 +320,7 @@ export default function IntegrationsPage() {
               {provider.status === "Connected" ? (
                 <>
                   <Link
-                    href={provider.id === "quickbooks" ? "/dashboard/quickbooks" : "#"}
+                    href={provider.id === "quickbooks" ? "/dashboard/quickbooks" : provider.id === "xero" ? "/providers/xero/dashboard" : "#"}
                     className="flex h-[38px] flex-1 items-center justify-center gap-[8px] rounded-[7px] border border-[#3a3a3a] bg-[#1a1a1a] text-[13px] font-bold text-white transition-colors hover:bg-[#2a2a2a] hover:border-white/20"
                   >
                     Configure Sync
@@ -319,6 +344,15 @@ export default function IntegrationsPage() {
                 >
                   <Plug className="h-4 w-4 text-black" />
                   Connect QuickBooks
+                </Button>
+              ) : provider.id === "xero" ? (
+                <Button
+                  onClick={connectXero}
+                  isLoading={checkingXero}
+                  className="flex-1 h-[38px] text-[13px] font-bold gap-2"
+                >
+                  <Plug className="h-4 w-4 text-black" />
+                  Connect Xero
                 </Button>
               ) : (
                 <Button
