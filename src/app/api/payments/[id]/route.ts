@@ -33,6 +33,7 @@ export async function GET(
     try {
       console.log(`[Proxy] Local payment not found. Querying QuickBooks invoices as fallback...`);
       const qbRes = await fetch(`${BACKEND_URL}/quickbooks/invoices`, {
+        headers: { Authorization: authHeader },
         cache: "no-store",
       });
       
@@ -84,6 +85,7 @@ export async function GET(
     try {
       console.log(`[Proxy] Local payment not found. Querying Xero invoices as fallback...`);
       const xeroRes = await fetch(`${BACKEND_URL}/xero/invoices`, {
+        headers: { Authorization: authHeader },
         cache: "no-store",
       });
       
