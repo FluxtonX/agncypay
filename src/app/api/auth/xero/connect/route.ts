@@ -20,15 +20,15 @@ export async function GET(request: Request) {
 
   const scopes = [
     "offline_access",
-    "accounting.transactions",
-    "accounting.contacts",
-    "accounting.settings",
-    "openid",
-    "profile",
-    "email"
+    "accounting.invoices",
+    "accounting.payments",
+    "accounting.contacts"
   ].join(" ");
 
   const authUri = `https://login.xero.com/identity/connect/authorize?response_type=code&client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scopes)}&state=xero-oauth-state`;
+
+  console.log("[XERO AUTH] Generated Redirect URL:", authUri);
+  console.log("[XERO AUTH] Requested Scopes:", scopes);
 
   return NextResponse.redirect(authUri);
 }
