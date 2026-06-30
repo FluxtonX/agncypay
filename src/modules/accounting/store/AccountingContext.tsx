@@ -54,17 +54,17 @@ export function AccountingProvider({ children }: { children: React.ReactNode }) 
     sage: null,
   });
 
-  const fetchAllConnectedData = useCallback(async (currentStatuses: Record<ProviderType, ConnectionStatus | null>) => {
+  const fetchAllConnectedData = useCallback(async () => {
     const providers: ProviderType[] = ["quickbooks", "xero", "sage"];
     try {
       const results = await Promise.all(
         providers.map(async (p) => {
-          const status = currentStatuses[p];
-          if (!status?.connected) {
-            return { provider: p, invoices: [], payouts: [], vendors: [] };
-          }
           try {
             const adapter = accountingService.getAdapter(p);
+            const status = await adapter.getStatus();
+            if (!status?.connected) {
+              return { provider: p, status, invoices: [], payouts: [], vendors: [] };
+            }
             const [invs, pays, vends] = await Promise.all([
               adapter.getInvoices().catch(() => [] as NormalizedInvoice[]),
               adapter.getPayouts().catch(() => [] as NormalizedPayout[]),
@@ -72,13 +72,14 @@ export function AccountingProvider({ children }: { children: React.ReactNode }) 
             ]);
             return {
               provider: p,
+              status,
               invoices: invs.map(inv => ({ ...inv, provider: p })),
               payouts: pays.map(pay => ({ ...pay, provider: p })),
               vendors: vends.map(vend => ({ ...vend, provider: p })),
             };
           } catch (e) {
             console.error(`Error loading fallback data for ${p}`, e);
-            return { provider: p, invoices: [], payouts: [], vendors: [] };
+            return { provider: p, status: { connected: false, environment: "sandbox" }, invoices: [], payouts: [], vendors: [] };
           }
         })
       );
@@ -98,7 +99,14 @@ export function AccountingProvider({ children }: { children: React.ReactNode }) 
         }
       });
 
+      const nextStatuses = {
+        quickbooks: results.find((r) => r.provider === "quickbooks")?.status || null,
+        xero: results.find((r) => r.provider === "xero")?.status || null,
+        sage: results.find((r) => r.provider === "sage")?.status || null,
+      };
+
       startTransition(() => {
+        setConnectionStatuses(nextStatuses);
         setAllInvoices(combinedInvoices);
         setAllPayouts(combinedPayouts);
         setAllVendors(combinedVendors);
@@ -110,29 +118,7 @@ export function AccountingProvider({ children }: { children: React.ReactNode }) 
 
   const refreshStatuses = useCallback(async () => {
     try {
-      const providers: ProviderType[] = ["quickbooks", "xero", "sage"];
-      const statuses = await Promise.all(
-        providers.map(async (p) => {
-          try {
-            const status = await accountingService.getAdapter(p).getStatus();
-            setProviderErrors((prev) => ({ ...prev, [p]: null }));
-            return status;
-          } catch (e: any) {
-            console.error(`Failed to fetch status for ${p}`, e);
-            setProviderErrors((prev) => ({ ...prev, [p]: e?.message || "Failed to fetch status" }));
-            return { connected: false, environment: "sandbox" };
-          }
-        })
-      );
-
-      const nextStatuses = {
-        quickbooks: statuses[0],
-        xero: statuses[1],
-        sage: statuses[2],
-      };
-
-      setConnectionStatuses(nextStatuses);
-      await fetchAllConnectedData(nextStatuses);
+      await fetchAllConnectedData();
     } catch (e) {
       console.error("Failed to refresh connection statuses", e);
     }
@@ -146,20 +132,19 @@ export function AccountingProvider({ children }: { children: React.ReactNode }) 
 
     try {
       const adapter = accountingService.getAdapter(targetProvider);
-      
       const status = await adapter.getStatus();
-      const nextStatuses = {
-        ...connectionStatuses,
+      
+      setConnectionStatuses((prev) => ({
+        ...prev,
         [targetProvider]: status,
-      };
-      setConnectionStatuses(nextStatuses);
+      }));
 
       if (!status.connected) {
         setInvoices([]);
         setPayouts([]);
         setVendors([]);
-        await fetchAllConnectedData(nextStatuses);
         setLoading(false);
+        fetchAllConnectedData();
         return;
       }
 
@@ -184,14 +169,14 @@ export function AccountingProvider({ children }: { children: React.ReactNode }) 
         setVendors(vends);
       });
 
-      await fetchAllConnectedData(nextStatuses);
+      fetchAllConnectedData();
     } catch (err: any) {
       setError(err?.message || `Failed to fetch data for ${targetProvider}`);
       setProviderErrors((prev) => ({ ...prev, [targetProvider]: err?.message || "Failed to fetch data" }));
     } finally {
       setLoading(false);
     }
-  }, [currentProvider, connectionStatuses, fetchAllConnectedData]);
+  }, [currentProvider, fetchAllConnectedData]);
 
   // Load connection statuses on mount
   useEffect(() => {
@@ -230,7 +215,7 @@ export function AccountingProvider({ children }: { children: React.ReactNode }) 
         setInvoices([]);
         setPayouts([]);
         setVendors([]);
-        await fetchAllConnectedData(nextStatuses);
+        await fetchAllConnectedData();
       }
     } catch (err: any) {
       setError(err?.message || `Failed to disconnect ${currentProvider}`);
