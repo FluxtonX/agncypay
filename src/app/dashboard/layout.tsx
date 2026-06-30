@@ -106,6 +106,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     const connectedProviders = providerList.filter((p) => connectionStatuses[p.id as ProviderType]?.connected);
     const erroredProviders = providerList.filter((p) => !!providerErrors[p.id as ProviderType]);
 
+    const connectedNames = connectedProviders.map(p => p.name).join(", ");
+
     return (
       <div className="flex flex-wrap items-center gap-2">
         {erroredProviders.map((p) => (
@@ -120,17 +122,23 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </button>
           </div>
         ))}
-        {connectedProviders.map((p) => (
-          <div key={p.id} className="flex items-center gap-2 rounded-full border border-[#3a3a3a] bg-white/[0.02] px-3 py-1 text-[10px] sm:text-[11px] font-bold text-neutral-300">
-            <span 
-              className="h-1.5 w-1.5 rounded-full" 
-              style={{ backgroundColor: p.color }}
-            />
-            {p.name} Connected
+        {connectedProviders.length > 0 && (
+          <div className="flex items-center gap-2.5 rounded-full border border-[#3a3a3a] bg-white/[0.02] px-3.5 py-1 text-[11px] font-bold text-neutral-300">
+            <div className="flex gap-1 items-center shrink-0">
+              {connectedProviders.map((p) => (
+                <span 
+                  key={p.id}
+                  className="h-1.5 w-1.5 rounded-full" 
+                  style={{ backgroundColor: p.color }}
+                  title={`${p.name} Connected`}
+                />
+              ))}
+            </div>
+            <span>{connectedNames} Connected</span>
           </div>
-        ))}
+        )}
         {connectedProviders.length === 0 && erroredProviders.length === 0 && (
-          <div className="flex items-center gap-2 rounded-full border border-[#3a3a3a] bg-white/[0.02] px-3 py-1 text-[10px] sm:text-[11px] font-bold text-neutral-500">
+          <div className="flex items-center gap-2 rounded-full border border-[#3a3a3a] bg-white/[0.02] px-3.5 py-1 text-[11px] font-bold text-neutral-500">
             <span className="h-1.5 w-1.5 rounded-full bg-neutral-700" />
             No Platforms Connected
           </div>
