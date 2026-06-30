@@ -8,10 +8,11 @@ import { Input } from "@/shared/components/ui/Input";
 import { Button } from "@/shared/components/ui/Button";
 import Link from "next/link";
 import Image from "next/image";
-import { ArrowLeft, Mail } from "lucide-react";
+import { ArrowLeft, CheckCircle2 } from "lucide-react";
 
 export default function ForgotPasswordPage() {
   const [success, setSuccess] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const {
     register,
@@ -21,14 +22,30 @@ export default function ForgotPasswordPage() {
     resolver: zodResolver(forgotPasswordSchema),
     defaultValues: {
       email: "",
+      password: "",
+      confirmPassword: "",
     },
   });
 
   const onSubmit = async (data: ForgotPasswordInput) => {
-    // Simulate API delay
-    await new Promise((resolve) => setTimeout(resolve, 1500));
-    console.log("Password reset request submitted for:", data.email);
-    setSuccess(true);
+    setErrorMsg(null);
+    try {
+      const res = await fetch("/api/auth/forgot-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: data.email,
+          password: data.password,
+        }),
+      });
+      const resData = await res.json();
+      if (!res.ok) {
+        throw new Error(resData.message || "Failed to reset password.");
+      }
+      setSuccess(true);
+    } catch (err: any) {
+      setErrorMsg(err.message || "Something went wrong. Please try again.");
+    }
   };
 
   return (
@@ -52,12 +69,12 @@ export default function ForgotPasswordPage() {
       <div className="w-full max-w-[440px] rounded-2xl border border-white/[0.08] bg-white/[0.02] p-8 shadow-2xl backdrop-blur-xl relative z-10">
         {success ? (
           <div className="flex flex-col items-center justify-center text-center py-4">
-            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-[#e5e5e5]/10 text-white mb-6 border border-white/20">
-              <Mail className="h-8 w-8" />
+            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-green-500/10 text-green-500 mb-6 border border-green-500/20">
+              <CheckCircle2 className="h-8 w-8" />
             </div>
-            <h2 className="text-2xl font-bold text-white mb-2">Check your email</h2>
+            <h2 className="text-2xl font-bold text-white mb-2">Password Reset Success!</h2>
             <p className="text-sm text-neutral-400 mb-8 leading-relaxed">
-              We have sent a temporary password reset link to your email address if it is associated with an active account.
+              Your password has been changed successfully. You can now sign in with your new credentials.
             </p>
             <Link
               href="/auth/login"
@@ -74,11 +91,16 @@ export default function ForgotPasswordPage() {
                 Reset password
               </h1>
               <p className="text-sm text-neutral-400">
-                Enter your email address and we&apos;ll send you a recovery link
+                Enter your registered email address and define a new password below
               </p>
             </div>
 
-            <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+            <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
+              {errorMsg && (
+                <div className="rounded-lg bg-red-500/10 border border-red-500/20 p-3 text-xs font-semibold text-red-400">
+                  {errorMsg}
+                </div>
+              )}
               <Input
                 {...register("email")}
                 id="email"
@@ -88,8 +110,28 @@ export default function ForgotPasswordPage() {
                 autoComplete="email"
               />
 
-              <Button type="submit" isLoading={isSubmitting} className="w-full py-3">
-                Send Recovery Link
+              <Input
+                {...register("password")}
+                id="password"
+                type="password"
+                label="New Password"
+                placeholder="••••••••"
+                error={errors.password?.message}
+                autoComplete="new-password"
+              />
+
+              <Input
+                {...register("confirmPassword")}
+                id="confirmPassword"
+                type="password"
+                label="Confirm New Password"
+                placeholder="••••••••"
+                error={errors.confirmPassword?.message}
+                autoComplete="new-password"
+              />
+
+              <Button type="submit" isLoading={isSubmitting} className="w-full py-3 mt-2">
+                Reset Password
               </Button>
 
               <div className="text-center">
