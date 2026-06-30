@@ -20,6 +20,7 @@ import {
   ChevronRight,
   Loader2,
   ChevronLeft,
+  Link2,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -99,11 +100,10 @@ export function InvoicesPage() {
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   // Provider Invoices state from unified store
-  const { currentProvider, invoices, loading: loadingProvider, connectionStatuses, error: providerError } = useAccounting();
+  const { currentProvider, allInvoices, loading: loadingProvider, connectionStatuses, error: providerError } = useAccounting();
   const [expandedNames, setExpandedNames] = useState<string[]>([]);
 
-  const providerInfo = getProviderDetails(currentProvider);
-  const isConnected = !!connectionStatuses[currentProvider]?.connected;
+  const anyConnected = Object.values(connectionStatuses).some(status => status?.connected);
 
   const toggleExpand = (name: string) => {
     setExpandedNames((prev) =>
@@ -112,18 +112,21 @@ export function InvoicesPage() {
   };
 
   const groupedProviderInvoices = React.useMemo(() => {
-    const groups: { [key: string]: GroupedInvoice } = {};
-    invoices.forEach((inv) => {
-      if (!groups[inv.name]) {
-        groups[inv.name] = {
+    const groups: { [key: string]: any } = {};
+    allInvoices.forEach((inv) => {
+      // Group key includes provider to isolate same-named clients across platforms
+      const key = `${inv.name}_${inv.provider}`;
+      if (!groups[key]) {
+        groups[key] = {
           name: inv.name,
           totalAmount: 0,
           status: "Paid",
           latestDate: inv.date,
           items: [],
+          provider: inv.provider,
         };
       }
-      const g = groups[inv.name];
+      const g = groups[key];
       g.totalAmount += inv.amount;
       g.items.push(inv);
       if (inv.status === "Pending") {
@@ -133,8 +136,18 @@ export function InvoicesPage() {
         g.latestDate = inv.date;
       }
     });
-    return Object.values(groups).sort((a, b) => b.totalAmount - a.totalAmount);
-  }, [invoices]);
+    
+    // Sort: QuickBooks first, then Xero, then Sage
+    const providerOrder: Record<string, number> = { quickbooks: 1, xero: 2, sage: 3 };
+    return Object.values(groups).sort((a: any, b: any) => {
+      const orderA = providerOrder[a.provider] || 99;
+      const orderB = providerOrder[b.provider] || 99;
+      if (orderA !== orderB) {
+        return orderA - orderB;
+      }
+      return b.totalAmount - a.totalAmount;
+    });
+  }, [allInvoices]);
 
   const {
     register,
@@ -353,37 +366,36 @@ export function InvoicesPage() {
         <div className="flex justify-between items-center mb-6">
           <div>
             <h3 className="text-xs font-bold uppercase tracking-wider text-neutral-400">
-              {providerInfo.name} Synced Invoices
+              Synced Invoices
             </h3>
-            <p className="text-[10px] text-neutral-500 mt-1">Grouped by platform client. Click a row to expand invoices.</p>
+            <p className="text-[10px] text-neutral-500 mt-1">Grouped by platform client. Sorted by QuickBooks first, then Xero.</p>
           </div>
         </div>
 
         {loadingProvider ? (
           <div className="flex flex-col items-center justify-center py-12">
             <Loader2 className="h-8 w-8 text-neutral-500 animate-spin mb-3" />
-            <p className="text-xs text-neutral-500">Querying {providerInfo.name} invoices...</p>
+            <p className="text-xs text-neutral-500">Querying platform invoices...</p>
           </div>
         ) : providerError ? (
           <div className="text-xs text-red-400 font-medium py-6 text-center">{providerError}</div>
-        ) : !isConnected ? (
+        ) : !anyConnected ? (
           <div className="flex flex-col items-center justify-center text-center py-16 border border-dashed border-[#3a3a3a] rounded-xl bg-white/[0.01]">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={providerInfo.logo} alt={providerInfo.name} className="h-10 w-10 object-contain mb-4 opacity-40" />
-            <h4 className="text-sm font-bold text-white mb-1">{providerInfo.name} is not connected</h4>
+            <Link2 className="h-10 w-10 text-neutral-600 mb-4 stroke-[1.5] opacity-40" />
+            <h4 className="text-sm font-bold text-white mb-1">No accounting platforms are connected</h4>
             <p className="text-xs text-neutral-400 max-w-[280px] leading-relaxed mb-6">
-              Connect {providerInfo.name} integration to view and settle your invoices.
+              Connect a QuickBooks or Xero integration to view and settle your invoices.
             </p>
             <Link href="/dashboard/integrations">
-              <Button className="h-9 px-4 text-xs font-bold">Connect {providerInfo.name}</Button>
+              <Button className="h-9 px-4 text-xs font-bold">Connect a Platform</Button>
             </Link>
           </div>
         ) : groupedProviderInvoices.length === 0 ? (
           <div className="flex flex-col items-center justify-center text-center py-16 border border-dashed border-[#3a3a3a] rounded-xl bg-white/[0.01]">
             <FileText className="h-10 w-10 text-neutral-600 mb-4 stroke-[1.5]" />
-            <h4 className="text-sm font-bold text-white mb-1">No {providerInfo.name} invoices found</h4>
+            <h4 className="text-sm font-bold text-white mb-1">No synced invoices found</h4>
             <p className="text-xs text-neutral-400 max-w-[280px]">
-              No active invoices found in your {providerInfo.name} workspace.
+              No active invoices found in your connected workspaces.
             </p>
           </div>
         ) : (
@@ -419,7 +431,7 @@ export function InvoicesPage() {
                           <div className="flex items-center gap-2">
                             <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded bg-neutral-900 border border-[#2a2a2a] p-1">
                               {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img src={providerInfo.logo} alt={providerInfo.name} className="h-full w-full object-contain" />
+                              <img src={getProviderDetails(group.provider)?.logo} alt={group.provider} className="h-full w-full object-contain" />
                             </div>
                             {group.name}
                           </div>
@@ -456,7 +468,7 @@ export function InvoicesPage() {
                                   </tr>
                                 </thead>
                                 <tbody className="divide-y divide-[#2a2a2a]">
-                                  {group.items.map((item) => (
+                                  {group.items.map((item: any) => (
                                     <tr key={item.id} className="hover:bg-white/[0.01]">
                                       <td className="px-4 py-2.5 font-mono text-white">#{item.docNumber}</td>
                                       <td className="px-4 py-2.5 max-w-[200px] truncate">{item.detail}</td>

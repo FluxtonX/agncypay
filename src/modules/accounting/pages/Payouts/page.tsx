@@ -33,15 +33,14 @@ const getProviderDetails = (provider: ProviderType) => {
 };
 
 export default function PayoutsPage() {
-  const { currentProvider, payouts, loading, connectionStatuses, error, fetchData } = useAccounting();
+  const { currentProvider, allPayouts, loading, connectionStatuses, error, fetchData } = useAccounting();
 
   const [filtered, setFiltered] = useState<any[]>([]);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"All" | "Paid" | "Pending" | "Failed">("All");
   const [expandedNames, setExpandedNames] = useState<string[]>([]);
 
-  const providerInfo = getProviderDetails(currentProvider);
-  const isConnected = !!connectionStatuses[currentProvider]?.connected;
+  const anyConnected = Object.values(connectionStatuses).some(status => status?.connected);
 
   const toggleExpand = (name: string) => {
     setExpandedNames((prev) =>
@@ -50,18 +49,20 @@ export default function PayoutsPage() {
   };
 
   const groupedPayouts = React.useMemo(() => {
-    const groups: { [key: string]: GroupedPayout } = {};
+    const groups: { [key: string]: any } = {};
     filtered.forEach((p) => {
-      if (!groups[p.name]) {
-        groups[p.name] = {
+      const key = `${p.name}_${p.provider}`;
+      if (!groups[key]) {
+        groups[key] = {
           name: p.name,
           totalAmount: 0,
           fallback: p.fallback,
           latestDate: p.date,
           items: [],
+          provider: p.provider,
         };
       }
-      const g = groups[p.name];
+      const g = groups[key];
       const num = Number(p.amount.replace(/[^0-9.-]+/g, ""));
       g.totalAmount += isNaN(num) ? 0 : num;
       g.items.push(p);
@@ -69,11 +70,21 @@ export default function PayoutsPage() {
         g.latestDate = p.date;
       }
     });
-    return Object.values(groups).sort((a, b) => b.totalAmount - a.totalAmount);
+    
+    // Sort: QuickBooks first, then Xero, then Sage
+    const providerOrder: Record<string, number> = { quickbooks: 1, xero: 2, sage: 3 };
+    return Object.values(groups).sort((a: any, b: any) => {
+      const orderA = providerOrder[a.provider] || 99;
+      const orderB = providerOrder[b.provider] || 99;
+      if (orderA !== orderB) {
+        return orderA - orderB;
+      }
+      return b.totalAmount - a.totalAmount;
+    });
   }, [filtered]);
 
   useEffect(() => {
-    let result = payouts;
+    let result = allPayouts;
     if (search.trim()) {
       const q = search.toLowerCase();
       result = result.filter(
@@ -87,7 +98,7 @@ export default function PayoutsPage() {
       result = result.filter((p) => p.status === statusFilter);
     }
     setFiltered(result);
-  }, [search, statusFilter, payouts]);
+  }, [search, statusFilter, allPayouts]);
 
   const handleExport = () => {
     const rows = [
@@ -124,8 +135,8 @@ export default function PayoutsPage() {
 
         {/* Header */}
         <div className="flex flex-col gap-1 mb-8">
-          <h1 className="text-2xl font-bold tracking-tight text-white capitalize">{providerInfo.name} Outgoing Payouts</h1>
-          <p className="text-sm text-neutral-500">Full history of payouts sent to talent, vendors, and agencies synced to {providerInfo.name}.</p>
+          <h1 className="text-2xl font-bold tracking-tight text-white capitalize">Outgoing Payouts</h1>
+          <p className="text-sm text-neutral-500">Full history of payouts sent to talent, vendors, and agencies synced to your platforms.</p>
         </div>
 
         {/* Toolbar */}
@@ -187,13 +198,12 @@ export default function PayoutsPage() {
               <p className="text-sm text-red-400 mb-3">{error}</p>
               <button onClick={() => fetchData()} className="text-xs font-bold text-white underline">Try again</button>
             </div>
-          ) : !isConnected ? (
+          ) : !anyConnected ? (
             <div className="flex flex-col items-center justify-center py-24 text-center px-6">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={providerInfo.logo} alt={providerInfo.name} className="h-10 w-10 object-contain mb-3 opacity-40" />
-              <p className="text-sm text-neutral-400 mb-3">{providerInfo.name} is not connected.</p>
+              <Landmark className="h-10 w-10 text-neutral-600 mb-3 stroke-[1.5] opacity-40" />
+              <p className="text-sm text-neutral-400 mb-3">No accounting platforms are connected.</p>
               <Link href="/dashboard/integrations" className="text-xs font-bold text-white hover:underline">
-                Connect {providerInfo.name} →
+                Connect a Platform →
               </Link>
             </div>
           ) : (
@@ -230,8 +240,14 @@ export default function PayoutsPage() {
                             </td>
                             <td className="px-5 py-4 font-bold text-white">
                               <div className="flex items-center gap-3">
-                                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/10 text-white font-bold text-xs border border-white/5">
-                                  {group.fallback}
+                                <div className="relative">
+                                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/10 text-white font-bold text-xs border border-white/5">
+                                    {group.fallback}
+                                  </div>
+                                  <div className="absolute -bottom-1 -right-1 flex h-4.5 w-4.5 items-center justify-center rounded-full bg-black p-0.5 border border-[#3a3a3a]">
+                                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                                    <img src={getProviderDetails(group.provider)?.logo} alt={group.provider} className="h-full w-full object-contain" />
+                                  </div>
                                 </div>
                                 <div>
                                   <p className="text-[13px] font-bold text-white">{group.name}</p>
@@ -261,7 +277,7 @@ export default function PayoutsPage() {
                                       </tr>
                                     </thead>
                                     <tbody className="divide-y divide-[#1a1a1a]">
-                                      {group.items.map((item) => (
+                                      {group.items.map((item: any) => (
                                         <tr key={item.id} className="hover:bg-white/[0.01]">
                                           <td className="px-4 py-2.5 font-mono text-white">#{item.id}</td>
                                           <td className="px-4 py-2.5 max-w-[200px] truncate text-neutral-300">{item.detail}</td>

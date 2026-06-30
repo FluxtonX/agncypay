@@ -10,6 +10,9 @@ interface AccountingContextType {
   invoices: NormalizedInvoice[];
   payouts: NormalizedPayout[];
   vendors: NormalizedVendor[];
+  allInvoices: NormalizedInvoice[];
+  allPayouts: NormalizedPayout[];
+  allVendors: NormalizedVendor[];
   connectionStatuses: Record<ProviderType, ConnectionStatus | null>;
   providerErrors: Record<ProviderType, string | null>;
   loading: boolean;
@@ -29,6 +32,11 @@ export function AccountingProvider({ children }: { children: React.ReactNode }) 
   const [invoices, setInvoices] = useState<NormalizedInvoice[]>([]);
   const [payouts, setPayouts] = useState<NormalizedPayout[]>([]);
   const [vendors, setVendors] = useState<NormalizedVendor[]>([]);
+  
+  const [allInvoices, setAllInvoices] = useState<NormalizedInvoice[]>([]);
+  const [allPayouts, setAllPayouts] = useState<NormalizedPayout[]>([]);
+  const [allVendors, setAllVendors] = useState<NormalizedVendor[]>([]);
+
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
@@ -45,6 +53,60 @@ export function AccountingProvider({ children }: { children: React.ReactNode }) 
     xero: null,
     sage: null,
   });
+
+  const fetchAllConnectedData = useCallback(async (currentStatuses: Record<ProviderType, ConnectionStatus | null>) => {
+    const providers: ProviderType[] = ["quickbooks", "xero", "sage"];
+    try {
+      const results = await Promise.all(
+        providers.map(async (p) => {
+          const status = currentStatuses[p];
+          if (!status?.connected) {
+            return { provider: p, invoices: [], payouts: [], vendors: [] };
+          }
+          try {
+            const adapter = accountingService.getAdapter(p);
+            const [invs, pays, vends] = await Promise.all([
+              adapter.getInvoices().catch(() => [] as NormalizedInvoice[]),
+              adapter.getPayouts().catch(() => [] as NormalizedPayout[]),
+              adapter.getVendors().catch(() => [] as NormalizedVendor[]),
+            ]);
+            return {
+              provider: p,
+              invoices: invs.map(inv => ({ ...inv, provider: p })),
+              payouts: pays.map(pay => ({ ...pay, provider: p })),
+              vendors: vends.map(vend => ({ ...vend, provider: p })),
+            };
+          } catch (e) {
+            console.error(`Error loading fallback data for ${p}`, e);
+            return { provider: p, invoices: [], payouts: [], vendors: [] };
+          }
+        })
+      );
+
+      // Order: QuickBooks first, then Xero, then Sage
+      const order: ProviderType[] = ["quickbooks", "xero", "sage"];
+      let combinedInvoices: NormalizedInvoice[] = [];
+      let combinedPayouts: NormalizedPayout[] = [];
+      let combinedVendors: NormalizedVendor[] = [];
+
+      order.forEach((p) => {
+        const res = results.find((r) => r.provider === p);
+        if (res) {
+          combinedInvoices = [...combinedInvoices, ...res.invoices];
+          combinedPayouts = [...combinedPayouts, ...res.payouts];
+          combinedVendors = [...combinedVendors, ...res.vendors];
+        }
+      });
+
+      startTransition(() => {
+        setAllInvoices(combinedInvoices);
+        setAllPayouts(combinedPayouts);
+        setAllVendors(combinedVendors);
+      });
+    } catch (e) {
+      console.error("Failed to aggregate connected data", e);
+    }
+  }, []);
 
   const refreshStatuses = useCallback(async () => {
     try {
@@ -63,15 +125,18 @@ export function AccountingProvider({ children }: { children: React.ReactNode }) 
         })
       );
 
-      setConnectionStatuses({
+      const nextStatuses = {
         quickbooks: statuses[0],
         xero: statuses[1],
         sage: statuses[2],
-      });
+      };
+
+      setConnectionStatuses(nextStatuses);
+      await fetchAllConnectedData(nextStatuses);
     } catch (e) {
       console.error("Failed to refresh connection statuses", e);
     }
-  }, []);
+  }, [fetchAllConnectedData]);
 
   const fetchData = useCallback(async (providerToFetch?: ProviderType) => {
     const targetProvider = providerToFetch || currentProvider;
@@ -82,22 +147,22 @@ export function AccountingProvider({ children }: { children: React.ReactNode }) 
     try {
       const adapter = accountingService.getAdapter(targetProvider);
       
-      // Fetch statuses first to verify connection
       const status = await adapter.getStatus();
-      setConnectionStatuses((prev) => ({
-        ...prev,
+      const nextStatuses = {
+        ...connectionStatuses,
         [targetProvider]: status,
-      }));
+      };
+      setConnectionStatuses(nextStatuses);
 
       if (!status.connected) {
         setInvoices([]);
         setPayouts([]);
         setVendors([]);
+        await fetchAllConnectedData(nextStatuses);
         setLoading(false);
         return;
       }
 
-      // Fetch data in parallel
       const [invs, pays, vends] = await Promise.all([
         adapter.getInvoices().catch((e) => {
           setProviderErrors((prev) => ({ ...prev, [targetProvider]: e?.message || "Failed to fetch invoices" }));
@@ -118,13 +183,15 @@ export function AccountingProvider({ children }: { children: React.ReactNode }) 
         setPayouts(pays);
         setVendors(vends);
       });
+
+      await fetchAllConnectedData(nextStatuses);
     } catch (err: any) {
       setError(err?.message || `Failed to fetch data for ${targetProvider}`);
       setProviderErrors((prev) => ({ ...prev, [targetProvider]: err?.message || "Failed to fetch data" }));
     } finally {
       setLoading(false);
     }
-  }, [currentProvider]);
+  }, [currentProvider, connectionStatuses, fetchAllConnectedData]);
 
   // Load connection statuses on mount
   useEffect(() => {
@@ -155,13 +222,15 @@ export function AccountingProvider({ children }: { children: React.ReactNode }) 
       const adapter = accountingService.getAdapter(currentProvider);
       const success = await adapter.disconnect();
       if (success) {
-        setConnectionStatuses((prev) => ({
-          ...prev,
+        const nextStatuses = {
+          ...connectionStatuses,
           [currentProvider]: { connected: false, environment: "sandbox" },
-        }));
+        };
+        setConnectionStatuses(nextStatuses);
         setInvoices([]);
         setPayouts([]);
         setVendors([]);
+        await fetchAllConnectedData(nextStatuses);
       }
     } catch (err: any) {
       setError(err?.message || `Failed to disconnect ${currentProvider}`);
@@ -182,6 +251,9 @@ export function AccountingProvider({ children }: { children: React.ReactNode }) 
         invoices,
         payouts,
         vendors,
+        allInvoices,
+        allPayouts,
+        allVendors,
         connectionStatuses,
         providerErrors,
         loading,
