@@ -5,7 +5,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { loginSchema, LoginInput } from "../schemas/auth";
 import { useApp } from "@/shared/context/AppContext";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { AlertCircle, Eye, EyeOff, ShieldCheck, Lock, Globe2 } from "lucide-react";
@@ -85,6 +85,8 @@ const loaderStyle = `
 // ─── LoginForm ────────────────────────────────────────────────────────────────
 export function LoginForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const resetSuccess = searchParams.get("reset") === "success";
   const { login } = useApp();
   const [roleType, setRoleType] = useState<"brand" | "agency" | "talent">("brand");
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -287,6 +289,13 @@ export function LoginForm() {
           </div>
 
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
+            {resetSuccess && (
+              <div className="flex items-start gap-2.5 rounded-lg border border-green-500/20 bg-green-950/30 p-3.5 text-xs text-green-300 leading-relaxed animate-in fade-in slide-in-from-top-1 duration-200">
+                <ShieldCheck className="h-4.5 w-4.5 shrink-0 mt-0.5 text-green-400" />
+                <span>Password reset successfully! Please sign in with your new password.</span>
+              </div>
+            )}
+
             {/* Error alert */}
             {submitError && (
               <div className="flex items-start gap-2.5 rounded-lg border border-red-500/20 bg-red-950/30 p-3.5 text-xs text-red-300 leading-relaxed">
@@ -339,9 +348,9 @@ export function LoginForm() {
                   </label>
                   <Link
                     href="/auth/forgot-password"
-                    className="text-xs text-[#8E8E93] hover:text-white transition-colors"
+                    className="text-xs font-semibold text-neutral-400 hover:text-white hover:underline transition-colors cursor-pointer"
                   >
-                    Forgot?
+                    Forgot password?
                   </Link>
                 </div>
                 <Field
