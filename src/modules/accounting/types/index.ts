@@ -9,6 +9,7 @@ export interface NormalizedInvoice {
   amount: number;
   status: "Paid" | "Pending";
   daysText: string;
+  provider?: ProviderType;
 }
 
 export interface NormalizedPayout {
@@ -20,6 +21,7 @@ export interface NormalizedPayout {
   fallback: string; // 2-letter initials fallback (e.g. "JD")
   method: string;
   status: "Paid" | "Pending" | "Failed";
+  provider?: ProviderType;
 }
 
 export interface NormalizedVendor {
@@ -27,6 +29,7 @@ export interface NormalizedVendor {
   name: string;
   email?: string;
   phone?: string;
+  provider?: ProviderType;
 }
 
 export interface ConnectionStatus {

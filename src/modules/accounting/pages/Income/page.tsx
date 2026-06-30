@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, startTransition } from "react";
 import Link from "next/link";
-import { ChevronLeft, Download, Search, Loader2, FileText, RefreshCw, ChevronDown, ChevronRight } from "lucide-react";
+import { ChevronLeft, Download, Search, Loader2, FileText, RefreshCw, ChevronDown, ChevronRight, Link2 } from "lucide-react";
 import { Badge } from "@/shared/components/ui/Badge";
 import { useRouter } from "next/navigation";
 
@@ -35,15 +35,14 @@ const getProviderDetails = (provider: ProviderType) => {
 
 export default function IncomePage() {
   const router = useRouter();
-  const { currentProvider, invoices, loading, connectionStatuses, error, fetchData } = useAccounting();
+  const { currentProvider, allInvoices, loading, connectionStatuses, error, fetchData } = useAccounting();
   
   const [filtered, setFiltered] = useState<any[]>([]);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"All" | "Paid" | "Pending">("All");
   const [expandedNames, setExpandedNames] = useState<string[]>([]);
 
-  const providerInfo = getProviderDetails(currentProvider);
-  const isConnected = !!connectionStatuses[currentProvider]?.connected;
+  const anyConnected = Object.values(connectionStatuses).some(status => status?.connected);
 
   const toggleExpand = (name: string) => {
     setExpandedNames((prev) =>
@@ -52,18 +51,20 @@ export default function IncomePage() {
   };
 
   const groupedInvoices = React.useMemo(() => {
-    const groups: { [key: string]: GroupedInvoice } = {};
+    const groups: { [key: string]: any } = {};
     filtered.forEach((inv) => {
-      if (!groups[inv.name]) {
-        groups[inv.name] = {
+      const key = `${inv.name}_${inv.provider}`;
+      if (!groups[key]) {
+        groups[key] = {
           name: inv.name,
           totalAmount: 0,
           status: "Paid",
           latestDate: inv.date,
           items: [],
+          provider: inv.provider,
         };
       }
-      const g = groups[inv.name];
+      const g = groups[key];
       g.totalAmount += inv.amount;
       g.items.push(inv);
       if (inv.status === "Pending") {
@@ -73,11 +74,21 @@ export default function IncomePage() {
         g.latestDate = inv.date;
       }
     });
-    return Object.values(groups).sort((a, b) => b.totalAmount - a.totalAmount);
+    
+    // Sort: QuickBooks first, then Xero, then Sage
+    const providerOrder: Record<string, number> = { quickbooks: 1, xero: 2, sage: 3 };
+    return Object.values(groups).sort((a: any, b: any) => {
+      const orderA = providerOrder[a.provider] || 99;
+      const orderB = providerOrder[b.provider] || 99;
+      if (orderA !== orderB) {
+        return orderA - orderB;
+      }
+      return b.totalAmount - a.totalAmount;
+    });
   }, [filtered]);
 
   useEffect(() => {
-    let result = invoices;
+    let result = allInvoices;
     if (search.trim()) {
       const q = search.toLowerCase();
       result = result.filter(
@@ -91,7 +102,7 @@ export default function IncomePage() {
       result = result.filter((inv) => inv.status === statusFilter);
     }
     setFiltered(result);
-  }, [search, statusFilter, invoices]);
+  }, [search, statusFilter, allInvoices]);
 
   const handleExport = () => {
     const rows = [
@@ -136,8 +147,8 @@ export default function IncomePage() {
 
         {/* Header */}
         <div className="flex flex-col gap-1 mb-8">
-          <h1 className="text-2xl font-bold tracking-tight text-white capitalize">{providerInfo.name} Income &amp; Deposits</h1>
-          <p className="text-sm text-neutral-500">Full history of your {providerInfo.name} invoices and income.</p>
+          <h1 className="text-2xl font-bold tracking-tight text-white capitalize">Income &amp; Deposits</h1>
+          <p className="text-sm text-neutral-500">Full history of your platform invoices and income.</p>
         </div>
 
         {/* Toolbar */}
@@ -199,13 +210,12 @@ export default function IncomePage() {
               <p className="text-sm text-red-400 mb-3">{error}</p>
               <button onClick={() => fetchData()} className="text-xs font-bold text-white underline">Try again</button>
             </div>
-          ) : !isConnected ? (
+          ) : !anyConnected ? (
             <div className="flex flex-col items-center justify-center py-24 text-center px-6">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={providerInfo.logo} alt={providerInfo.name} className="h-10 w-10 object-contain mb-3 opacity-40" />
-              <p className="text-sm text-neutral-400 mb-3">{providerInfo.name} is not connected.</p>
+              <Link2 className="h-10 w-10 text-neutral-600 mb-3 stroke-[1.5] opacity-40" />
+              <p className="text-sm text-neutral-400 mb-3">No accounting platforms are connected.</p>
               <Link href="/dashboard/integrations" className="text-xs font-bold text-white hover:underline">
-                Connect {providerInfo.name} →
+                Connect a Platform →
               </Link>
             </div>
           ) : (
@@ -245,7 +255,7 @@ export default function IncomePage() {
                               <div className="flex items-center gap-2">
                                 <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded bg-neutral-900 border border-[#2a2a2a] p-1">
                                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                                  <img src={providerInfo.logo} alt={providerInfo.name} className="h-full w-full object-contain" />
+                                  <img src={getProviderDetails(group.provider)?.logo} alt={group.provider} className="h-full w-full object-contain" />
                                 </div>
                                 {group.name}
                               </div>
@@ -279,7 +289,7 @@ export default function IncomePage() {
                                       </tr>
                                     </thead>
                                     <tbody className="divide-y divide-[#1a1a1a]">
-                                      {group.items.map((item) => (
+                                      {group.items.map((item: any) => (
                                         <tr key={item.id} className="hover:bg-white/[0.01]">
                                           <td className="px-4 py-2.5 font-mono text-white">#{item.docNumber}</td>
                                           <td className="px-4 py-2.5 max-w-[200px] truncate text-neutral-300">{item.detail}</td>

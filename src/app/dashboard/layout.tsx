@@ -103,43 +103,38 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   ];
 
   const renderTopbarStatus = () => {
-    const isConnected = !!connectionStatuses[currentProvider]?.connected;
-    const hasError = !!providerErrors[currentProvider];
-    const errorMessage = providerErrors[currentProvider];
-    const providerName = providerList.find((p) => p.id === currentProvider)?.name || "Provider";
-
-    if (hasError) {
-      return (
-        <div className="flex items-center gap-2 rounded-full border border-red-500/20 bg-red-500/5 px-3.5 py-1 text-[11px] font-bold text-red-400">
-          <span className="h-1.5 w-1.5 rounded-full bg-red-500 animate-pulse" />
-          <span className="max-w-[280px] truncate">{providerName} Sync Error: {errorMessage}</span>
-          <button 
-            onClick={() => fetchData()}
-            className="ml-1.5 text-[10px] font-bold text-white hover:text-red-300 underline cursor-pointer shrink-0"
-          >
-            Retry
-          </button>
-        </div>
-      );
-    }
-
-    if (isConnected) {
-      const activeColor = providerList.find((p) => p.id === currentProvider)?.color || "#10b981";
-      return (
-        <div className="flex items-center gap-2 rounded-full border border-[#3a3a3a] bg-white/[0.02] px-3.5 py-1 text-[11px] font-bold text-neutral-300">
-          <span 
-            className="h-1.5 w-1.5 rounded-full" 
-            style={{ backgroundColor: activeColor }}
-          />
-          {providerName} Connected
-        </div>
-      );
-    }
+    const connectedProviders = providerList.filter((p) => connectionStatuses[p.id as ProviderType]?.connected);
+    const erroredProviders = providerList.filter((p) => !!providerErrors[p.id as ProviderType]);
 
     return (
-      <div className="flex items-center gap-2 rounded-full border border-[#3a3a3a] bg-white/[0.02] px-3.5 py-1 text-[11px] font-bold text-neutral-500">
-        <span className="h-1.5 w-1.5 rounded-full bg-neutral-700" />
-        {providerName} Disconnected
+      <div className="flex flex-wrap items-center gap-2">
+        {erroredProviders.map((p) => (
+          <div key={p.id} className="flex items-center gap-2 rounded-full border border-red-500/20 bg-red-500/5 px-3 py-1 text-[10px] sm:text-[11px] font-bold text-red-400">
+            <span className="h-1.5 w-1.5 rounded-full bg-red-500 animate-pulse" />
+            <span className="max-w-[200px] truncate">{p.name}: {providerErrors[p.id as ProviderType]}</span>
+            <button 
+              onClick={() => fetchData(p.id as ProviderType)}
+              className="ml-1 text-[9px] sm:text-[10px] font-bold text-white hover:text-red-300 underline cursor-pointer shrink-0"
+            >
+              Retry
+            </button>
+          </div>
+        ))}
+        {connectedProviders.map((p) => (
+          <div key={p.id} className="flex items-center gap-2 rounded-full border border-[#3a3a3a] bg-white/[0.02] px-3 py-1 text-[10px] sm:text-[11px] font-bold text-neutral-300">
+            <span 
+              className="h-1.5 w-1.5 rounded-full" 
+              style={{ backgroundColor: p.color }}
+            />
+            {p.name} Connected
+          </div>
+        ))}
+        {connectedProviders.length === 0 && erroredProviders.length === 0 && (
+          <div className="flex items-center gap-2 rounded-full border border-[#3a3a3a] bg-white/[0.02] px-3 py-1 text-[10px] sm:text-[11px] font-bold text-neutral-500">
+            <span className="h-1.5 w-1.5 rounded-full bg-neutral-700" />
+            No Platforms Connected
+          </div>
+        )}
       </div>
     );
   };
