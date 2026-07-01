@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { AppProvider } from "@/shared/context/AppContext";
 import { AccountingProvider } from "@/modules/accounting/store/AccountingContext";
+import { ReduxProvider } from "@/app/providers/ReduxProvider";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -29,11 +30,13 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased h-full flex flex-col bg-black text-white`}
       >
-        <AppProvider>
-          <AccountingProvider>
-            {children}
-          </AccountingProvider>
-        </AppProvider>
+        <ReduxProvider>
+          <AppProvider>
+            <AccountingProvider>
+              {children}
+            </AccountingProvider>
+          </AppProvider>
+        </ReduxProvider>
       </body>
     </html>
   );
