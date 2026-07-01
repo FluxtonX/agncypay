@@ -239,19 +239,12 @@ export default function PayoutsPage() {
                               {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                             </td>
                             <td className="px-5 py-4 font-bold text-white">
-                              <div className="flex items-center gap-3">
-                                <div className="relative">
-                                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/10 text-white font-bold text-xs border border-white/5">
-                                    {group.fallback}
-                                  </div>
-                                  <div className="absolute -bottom-1 -right-1 flex h-4.5 w-4.5 items-center justify-center rounded-full bg-black p-0.5 border border-[#3a3a3a]">
-                                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                                    <img src={getProviderDetails(group.provider)?.logo} alt={group.provider} className="h-full w-full object-contain" />
-                                  </div>
+                              <div className="flex items-center gap-2">
+                                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded bg-neutral-900 border border-[#2a2a2a] p-1">
+                                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                                  <img src={getProviderDetails(group.provider)?.logo} alt={group.provider} className="h-full w-full object-contain" />
                                 </div>
-                                <div>
-                                  <p className="text-[13px] font-bold text-white">{group.name}</p>
-                                </div>
+                                <span className="text-[13px] font-bold text-white">{group.name}</span>
                               </div>
                             </td>
                             <td className="px-4 py-4 text-xs font-semibold text-neutral-400">{group.items.length} payout{group.items.length !== 1 ? "s" : ""}</td>

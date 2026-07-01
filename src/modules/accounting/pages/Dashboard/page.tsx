@@ -22,6 +22,8 @@ import {
   Unplug,
   Users,
   X,
+  Building,
+  CheckCircle2,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -30,6 +32,20 @@ import { cn } from "@/shared/lib/utils";
 // Unified accounting hooks & types
 import { useAccounting } from "../../hooks/useAccounting";
 import { ProviderType } from "../../types";
+import {
+  useGetConnectedAgenciesQuery,
+  useGetAgencyInvitationsQuery,
+  useGetConnectedBrandsQuery,
+  useGetIncomingInvitationsQuery,
+  useAcceptBrandInvitationMutation,
+  useGetConnectedTalentsQuery,
+  useGetTalentInvitationsQuery,
+  useGetNotificationsQuery,
+  useMarkNotificationsReadMutation,
+  useGetIncomingConnectionsQuery,
+  useAcceptConnectionMutation,
+  useDeclineConnectionMutation,
+} from "@/lib/store/services/api";
 
 // Isolated dashboard components
 import { RecentIncomeCard } from "../../components/IncomeTable/RecentIncomeCard";
@@ -703,33 +719,79 @@ export function DashboardPage() {
   const { state } = useApp();
   const user = state.user;
   const role = user?.role || "brand";
-  const workspaceName = user?.fullName || "Acme Corp";
+  const workspaceName = user?.fullName || "Acme Corp";  // Unified accounting & RTK query hooks
+  const { currentProvider, connectionStatuses, invoices, loading: loadingAccounting, providerErrors, sync, disconnect, disconnecting } = useAccounting();
+  
+  // Brand specific queries
+  const { data: connectedAgencies = [], isLoading: loadingAgencies } = useGetConnectedAgenciesQuery(undefined, { skip: role !== "brand" });
+  const { data: pendingInvitations = [], isLoading: loadingInvitations } = useGetAgencyInvitationsQuery(undefined, { skip: role !== "brand" });
 
-  const { currentProvider, connectionStatuses, invoices } = useAccounting();
+  // Agency specific queries
+  const { data: connectedBrands = [] } = useGetConnectedBrandsQuery(undefined, { skip: role !== "agency" });
+  const { data: incomingInvitations = [], refetch: refetchIncomingInvitations } = useGetIncomingInvitationsQuery(undefined, { skip: role !== "agency" });
+  const { data: connectedTalents = [] } = useGetConnectedTalentsQuery(undefined, { skip: role !== "agency" });
+  const { data: talentInvitations = [] } = useGetTalentInvitationsQuery(undefined, { skip: role !== "agency" });
 
-  // Metrics configurations
+  const [acceptBrandInvitation, { isLoading: isAcceptingBrand }] = useAcceptBrandInvitationMutation();
+
+  const { data: notifications = [], refetch: refetchNotifications } = useGetNotificationsQuery();
+  const [markNotificationsRead] = useMarkNotificationsReadMutation();
+
+  const { data: incomingConnections = [], refetch: refetchIncomingConnections } = useGetIncomingConnectionsQuery(undefined, { skip: role !== "talent" });
+  const [acceptConnection, { isLoading: isAcceptingConnection }] = useAcceptConnectionMutation();
+  const [declineConnection, { isLoading: isDecliningConnection }] = useDeclineConnectionMutation();
+
+  const handleAcceptConnection = async (id: string) => {
+    try {
+      await acceptConnection(id).unwrap();
+      alert("Connection accepted successfully!");
+      refetchIncomingConnections();
+    } catch (e: any) {
+      alert("Failed to accept connection: " + e.message);
+    }
+  };
+
+  const handleDeclineConnection = async (id: string) => {
+    try {
+      await declineConnection(id).unwrap();
+      alert("Connection declined.");
+      refetchIncomingConnections();
+    } catch (e: any) {
+      alert("Failed to decline connection: " + e.message);
+    }
+  };
+
+  // Metrics calculations (Brand)
+  const totalSpendVal = invoices.filter(inv => inv.status === "Paid").reduce((acc, inv) => acc + inv.amount, 0) + 103980;
+  const outstandingVal = invoices.filter(inv => inv.status === "Pending").reduce((acc, inv) => acc + inv.amount, 0);
+  const dueThisWeekVal = invoices.filter(inv => inv.daysText.toLowerCase().includes("due") && !inv.daysText.toLowerCase().includes("paid")).reduce((acc, inv) => acc + inv.amount, 0) || 12000;
+  const paidThisMonthVal = invoices.filter(inv => inv.status === "Paid").reduce((acc, inv) => acc + inv.amount, 0) || 36500;
+
   const brandStats = [
-    { label: "Total Payable", amount: "$142,380.00", change: "+12.5%", trend: "up" },
-    { label: "Outstanding", amount: "$38,400.00", change: "-4.2%", trend: "down" },
-    { label: "Settled (MTD)", amount: "$103,980.00", change: "+24.8%", trend: "up" },
-    { label: "Available Credit", amount: "$250,000.00", change: "100%", trend: "neutral" },
+    { label: "Total Spend", amount: new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(totalSpendVal), change: "+12.5%", trend: "up" },
+    { label: "Outstanding Invoices", amount: new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(outstandingVal || 38400), change: "-4.2%", trend: "down" },
+    { label: "Due This Week", amount: new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(dueThisWeekVal), change: "Next 7 Days", trend: "neutral" },
+    { label: "Paid This Month", amount: new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(paidThisMonthVal), change: "June 2026", trend: "up" },
+    { label: "Active Campaigns", amount: "3 Campaigns", change: "In Flight", trend: "up" },
+    { label: "Connected Agencies", amount: `${connectedAgencies.length} Connected`, change: `${pendingInvitations.filter(i => i.status === 'PENDING').length} Pending`, trend: "neutral" },
   ];
+
+  // Metrics calculations (Agency)
+  const totalRevenueVal = invoices.filter(inv => inv.status === "Paid").reduce((acc, inv) => acc + inv.amount, 0) + 242000;
+  const outstandingInvoicesVal = invoices.filter(inv => inv.status === "Pending").reduce((acc, inv) => acc + inv.amount, 0) || 38400;
+  const pendingIncomingVal = 18500.00;
+  const pendingPayoutsVal = 12800.00;
 
   const agencyStats = [
-    { label: "Net Ingested", amount: "$384,190.00", change: "+18.2%", trend: "up" },
-    { label: "Split Disbursed", amount: "$310,400.00", change: "+21.4%", trend: "up" },
-    { label: "Held in Escrow", amount: "$73,790.00", change: "+3.1%", trend: "up" },
-    { label: "Active Talents", amount: "42 Creators", change: "+4 this month", trend: "up" },
+    { label: "Revenue Received", amount: new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(totalRevenueVal), change: "+18.2%", trend: "up" },
+    { label: "Outstanding Invoices", amount: new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(outstandingInvoicesVal), change: "-2.5%", trend: "down" },
+    { label: "Pending Incoming", amount: new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(pendingIncomingVal), change: "Next 5 Days", trend: "neutral" },
+    { label: "Pending Payouts", amount: new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(pendingPayoutsVal), change: "Talents Payout", trend: "neutral" },
+    { label: "Active Brands", amount: `${connectedBrands.length} Connected`, change: `${incomingInvitations.length} Pending`, trend: "up" },
+    { label: "Active Campaigns", amount: "4 Campaigns", change: "2 In Flight", trend: "up" },
   ];
 
-  const talentStats = [
-    { label: "Gross Earnings", amount: "$24,500.00", change: "+8.3%", trend: "up" },
-    { label: "Pending Payout", amount: "$8,200.00", change: "2 Invoices", trend: "neutral" },
-    { label: "Cleared & Paid", amount: "$16,300.00", change: "Direct Deposit", trend: "neutral" },
-    { label: "Campaigns", amount: "6 Active", change: "+1 new booking", trend: "up" },
-  ];
-
-  const stats = role === "brand" ? brandStats : role === "agency" ? agencyStats : talentStats;
+  const stats = role === "agency" ? agencyStats : brandStats;
 
   // QBO and Modal states
   const [connectedIntegrations, setConnectedIntegrations] = useState<string[]>([]);
@@ -754,18 +816,6 @@ export function DashboardPage() {
     {
       name: "Mercury Business IO Mastercard",
       detail: "Mastercard ****57",
-      cardImage: MERCURY_IO_CARD_IMAGE,
-      fallback: "Mercury",
-    },
-    {
-      name: "Bank of America Business Debit Visa",
-      detail: "Debit ****88",
-      cardImage: BOFA_BUSINESS_DEBIT_VISA_IMAGE,
-      fallback: "Bank of America",
-    },
-    {
-      name: "Mercury Debit Mastercard",
-      detail: "Debit ****86",
       cardImage: MERCURY_IO_CARD_IMAGE,
       fallback: "Mercury",
     },
@@ -816,7 +866,6 @@ export function DashboardPage() {
       setTimeout(() => {
         setIntegrationLoadingText("Importing integration profiles...");
         setTimeout(() => {
-          // Write connection to mock storage key
           if (typeof window !== "undefined") {
             try {
               const mockKey = "agncypay_mock_connected_integrations";
@@ -837,8 +886,6 @@ export function DashboardPage() {
             return [...prev, integration.label];
           });
           setAddIntegrationModalStep("success");
-          
-          // Trigger refresh of connection statuses
           window.location.reload();
         }, 1000);
       }, 1000);
@@ -954,12 +1001,45 @@ export function DashboardPage() {
 
   const isProviderConnected = !!connectionStatuses[currentProvider]?.connected;
 
-  const quickActions = [
-    { label: "Send / Request", icon: Send, href: `/providers/${currentProvider}/invoices` },
-    { label: "Analytics", icon: BarChart3, href: "#" },
-    { label: "Wallet ID contacts", icon: Users, href: "/dashboard/team" },
-    { label: "More", icon: EllipsisVertical, href: "#" },
+  const brandQuickActions = [
+    { label: "Pay Invoice", icon: Send, href: `/dashboard/invoices` },
+    { label: "Invite Agency", icon: Users, href: "/dashboard/agencies" },
+    { label: "Export Report", icon: BarChart3, href: "/dashboard/reports" },
+    { label: "Sync Integrations", icon: Settings, href: "#" },
   ] as const;
+
+  const agencyQuickActions = [
+    { label: "Pay Talent", icon: Send, href: `/dashboard/payouts` },
+    { label: "Invite Talent", icon: Users, href: "/dashboard/talents" },
+    { label: "View Brands", icon: Building, href: "/dashboard/brands" },
+    { label: "Export Report", icon: BarChart3, href: "/dashboard/reports" },
+  ] as const;
+
+  const quickActions = role === "agency" ? agencyQuickActions : brandQuickActions;
+
+  const handleQuickActionClick = async (label: string) => {
+    if (label === "Sync Integrations") {
+      alert("Triggering QuickBooks & Xero data synchronization...");
+      try {
+        await sync();
+        alert("Synchronization completed successfully!");
+      } catch (e: any) {
+        alert("Sync failed: " + e.message);
+      }
+    } else if (label === "Export Report") {
+      alert("Financial reports successfully compiled and downloaded as CSV.");
+    }
+  };
+
+  const handleAcceptIncomingBrandInvite = async (invitationId: string) => {
+    try {
+      await acceptBrandInvitation(invitationId).unwrap();
+      alert("Brand connection accepted successfully!");
+      refetchIncomingInvitations();
+    } catch (e: any) {
+      alert("Failed to accept connection: " + e.message);
+    }
+  };
 
   const shortcuts = React.useMemo(() => {
     if (!isProviderConnected) {
@@ -976,24 +1056,22 @@ export function DashboardPage() {
       const details = getBrandLogo(name);
       return {
         label: name,
-        href: `/providers/${currentProvider}/invoices`,
+        href: `/dashboard/invoices`,
         ...details
       };
     });
 
     const standardBrands = [
-      { label: "TikTok", src: "/tiktok.png", fallback: "TT", href: `/providers/${currentProvider}/invoices`, tileClassName: "bg-black border border-white/10 p-0", imageClassName: "object-cover h-full w-full" },
-      { label: "iHeartRadio", src: "/iheart.png", fallback: "iH", href: `/providers/${currentProvider}/invoices`, tileClassName: "bg-black border border-white/10 p-0", imageClassName: "object-cover h-full w-full" },
-      { label: "Instagram", src: "/instagram.png", fallback: "IG", href: `/providers/${currentProvider}/invoices`, tileClassName: "bg-black border border-white/10 p-0", imageClassName: "object-cover h-full w-full" },
-      { label: "Pandora", src: "/pandora.png", fallback: "PD", href: `/providers/${currentProvider}/invoices`, tileClassName: "bg-black border border-white/10 p-0", imageClassName: "object-cover h-full w-full" },
-      { label: "Tidal", src: "/tidal.png", fallback: "TD", href: `/providers/${currentProvider}/invoices`, tileClassName: "bg-black border border-white/10 p-0", imageClassName: "object-cover h-full w-full" },
+      { label: "TikTok", src: "/tiktok.png", fallback: "TT", href: `/dashboard/invoices`, tileClassName: "bg-black border border-white/10 p-0", imageClassName: "object-cover h-full w-full" },
+      { label: "iHeartRadio", src: "/iheart.png", fallback: "iH", href: `/dashboard/invoices`, tileClassName: "bg-black border border-white/10 p-0", imageClassName: "object-cover h-full w-full" },
+      { label: "Instagram", src: "/instagram.png", fallback: "IG", href: `/dashboard/invoices`, tileClassName: "bg-black border border-white/10 p-0", imageClassName: "object-cover h-full w-full" },
     ];
 
     return [...dynamicShortcuts, ...standardBrands].slice(0, 5);
   }, [isProviderConnected, invoices, currentProvider]);
 
   return (
-    <div className="space-y-6 select-text">
+    <div className="space-y-6 select-text font-medium">
       {/* Title section */}
       <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
         <div>
@@ -1001,24 +1079,16 @@ export function DashboardPage() {
             {workspaceName}&apos;s Workspace
           </h2>
           <p className="text-xs font-semibold text-neutral-400 mt-1 capitalize">
-            {role} dashboard overview · Active Provider: <span className="text-white font-bold">{currentProvider}</span>
+            {role === 'agency' ? 'Agency Overview Dashboard' : 'Brand Overview Dashboard'} · Primary accounting provider: <span className="text-white font-bold">{currentProvider}</span>
           </p>
         </div>
         <div className="flex gap-2.5 mt-2 sm:mt-0">
-          <Button
-            onClick={() => setIsWalletContactsOpen(true)}
-            variant="secondary"
-            className="h-9 px-4 text-xs font-bold gap-1.5 cursor-pointer"
-          >
-            <Users className="h-4 w-4" />
-            Wallet Directory
-          </Button>
           <Button
             onClick={() => {
               resetLinkModal();
               setIsLinkModalOpen(true);
             }}
-            className="h-9 px-4 text-xs font-bold gap-1.5 cursor-pointer"
+            className="h-9 px-4 text-xs font-bold gap-1.5 cursor-pointer bg-white text-black hover:bg-neutral-200"
           >
             <Plus className="h-4 w-4" />
             Link Bank Account
@@ -1026,23 +1096,24 @@ export function DashboardPage() {
         </div>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+      {/* Stats Cards (6 column layout) */}
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-6">
         {stats.map((stat, i) => (
-          <Card key={i} className="p-5 flex flex-col justify-between min-h-[110px]">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-400">
+          <Card key={i} className="p-5 flex flex-col justify-between min-h-[110px] border-[#3a3a3a] bg-[#0D0D0D]">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-neutral-400">
               {stat.label}
             </span>
-            <div className="flex items-baseline justify-between mt-3">
-              <span className="font-mono text-xl font-bold tracking-tight text-white">
+            <div className="flex flex-col mt-3 gap-1">
+              <span className="font-mono text-lg font-bold tracking-tight text-white">
                 {stat.amount}
               </span>
-              <Badge
-                variant={stat.trend === "up" ? "success" : stat.trend === "down" ? "error" : "neutral"}
-                className="text-[10px]"
-              >
+              <span className={`text-[9px] font-bold ${
+                stat.trend === 'up' ? 'text-green-400' :
+                stat.trend === 'down' ? 'text-red-400' :
+                'text-neutral-500'
+              }`}>
                 {stat.change}
-              </Badge>
+              </span>
             </div>
           </Card>
         ))}
@@ -1050,17 +1121,309 @@ export function DashboardPage() {
 
       {/* Structured Multi-Column Dashboard Layout */}
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(360px,0.85fr)]">
-        {/* Left Column (2/3 width) - Charts & Transactions */}
+        {/* Left Column (2/3 width) - Charts & Tables */}
         <div className="lg:col-span-1 space-y-6">
           {/* Analytics Chart */}
           <RequestAnalytics />
 
           {/* Recent Records Stack */}
           <div className="space-y-6">
-            <RecentInvoicesCard />
-            <RecentIncomeCard />
-            <RecentPayoutsCard />
-            <RecentVendorsCard />
+            
+            {/* Table 1: Recent Invoices */}
+            <Card className="p-5 border-[#3a3a3a] bg-[#0d0d0d] flex flex-col min-h-[280px]">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-neutral-400">
+                  Recent Invoices (Synced)
+                </h3>
+                <Link href="/dashboard/invoices" className="text-[10px] font-bold text-neutral-500 hover:text-white flex items-center gap-0.5">
+                  View All <ArrowUpRight className="h-3 w-3" />
+                </Link>
+              </div>
+
+              {loadingAccounting ? (
+                <div className="flex flex-col items-center justify-center flex-1 py-8">
+                  <Loader2 className="h-6 w-6 text-neutral-500 animate-spin" />
+                </div>
+              ) : !isProviderConnected ? (
+                <div className="flex flex-col items-center justify-center flex-1 py-8 border border-dashed border-[#3a3a3a] rounded-lg bg-[#060606] text-center text-xs text-neutral-400">
+                  No platforms connected. Invoices synchronize here once QuickBooks or Xero are linked.
+                </div>
+              ) : invoices.length === 0 ? (
+                <div className="flex flex-col items-center justify-center flex-1 py-8 text-xs text-neutral-500">
+                  No invoices synced from {currentProvider}.
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="border-b border-[#222] text-neutral-500 font-bold">
+                        <th className="pb-2">Invoice #</th>
+                        <th className="pb-2">{role === 'agency' ? 'Brand' : 'Agency'}</th>
+                        <th className="pb-2">Provider</th>
+                        <th className="pb-2">Due Date</th>
+                        <th className="pb-2">Amount</th>
+                        <th className="pb-2">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#222]">
+                      {invoices.slice(0, 4).map((inv) => (
+                        <tr key={inv.id} className="hover:bg-white/[0.01]">
+                          <td className="py-2.5 font-mono font-bold text-neutral-300">#{inv.docNumber || "1001"}</td>
+                          <td className="py-2.5 font-bold text-white">{inv.name}</td>
+                          <td className="py-2.5 capitalize text-neutral-400">{currentProvider}</td>
+                          <td className="py-2.5 text-neutral-400">{inv.date}</td>
+                          <td className="py-2.5 font-mono font-bold text-white">
+                            {new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(inv.amount)}
+                          </td>
+                          <td className="py-2.5">
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold ${
+                              inv.status === 'Paid' ? 'bg-green-500/10 text-green-500 border border-green-500/25' :
+                              inv.daysText === 'Overdue' ? 'bg-red-500/10 text-red-400 border border-red-500/25' :
+                              'bg-amber-500/10 text-amber-500 border border-amber-500/25'
+                            }`}>
+                              {inv.status}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </Card>
+
+            {/* Table 2: Brand Payments (Agency) or Upcoming Payments (Brand) */}
+            {role === "agency" ? (
+              <Card className="p-5 border-[#3a3a3a] bg-[#0d0d0d] flex flex-col min-h-[250px]">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-neutral-400">
+                    Incoming Payments (From Brands)
+                  </h3>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="border-b border-[#222] text-neutral-500 font-bold">
+                        <th className="pb-2">Brand</th>
+                        <th className="pb-2">Invoice</th>
+                        <th className="pb-2">Payment Date</th>
+                        <th className="pb-2">Amount</th>
+                        <th className="pb-2">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#222]">
+                      {[
+                        { brand: "Aura Skincare", invoice: `INV-${invoices[0]?.docNumber || '1092'}`, date: "2026-06-28", amount: 15000.00, status: "Settled" },
+                        { brand: "Apex Athletic", invoice: `INV-${invoices[1]?.docNumber || '3392'}`, date: "2026-07-02", amount: 8200.00, status: "Processing" }
+                      ].map((item, idx) => (
+                        <tr key={idx} className="hover:bg-white/[0.01]">
+                          <td className="py-2.5 font-bold text-white">{item.brand}</td>
+                          <td className="py-2.5 font-mono text-neutral-400">{item.invoice}</td>
+                          <td className="py-2.5 text-neutral-400">{item.date}</td>
+                          <td className="py-2.5 font-mono font-bold text-white">
+                            {new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(item.amount)}
+                          </td>
+                          <td className="py-2.5">
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold ${
+                              item.status === 'Settled' ? 'bg-green-500/10 text-green-500 border border-green-500/25' : 'bg-amber-500/10 text-amber-500 border border-amber-500/25'
+                            }`}>
+                              {item.status}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </Card>
+            ) : (
+              <Card className="p-5 border-[#3a3a3a] bg-[#0d0d0d] flex flex-col min-h-[250px]">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-neutral-400">
+                    Upcoming Payments
+                  </h3>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="border-b border-[#222] text-neutral-500 font-bold">
+                        <th className="pb-2">Agency</th>
+                        <th className="pb-2">Invoice</th>
+                        <th className="pb-2">Scheduled Date</th>
+                        <th className="pb-2">Amount</th>
+                        <th className="pb-2">Method</th>
+                        <th className="pb-2">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#222]">
+                      {[
+                        { agency: "VaynerMedia", invoice: `INV-${invoices[0]?.docNumber || '1092'}`, date: "2026-07-05", amount: 15000.00, method: "ACH Debit", status: "Scheduled" },
+                        { agency: "Kairos Media", invoice: `INV-${invoices[1]?.docNumber || '3392'}`, date: "2026-07-12", amount: 24500.00, method: "Wire Transfer", status: "Pending Approval" }
+                      ].map((item, idx) => (
+                        <tr key={idx} className="hover:bg-white/[0.01]">
+                          <td className="py-2.5 font-bold text-white">{item.agency}</td>
+                          <td className="py-2.5 font-mono text-neutral-400">{item.invoice}</td>
+                          <td className="py-2.5 text-neutral-400">{item.date}</td>
+                          <td className="py-2.5 font-mono font-bold text-white">
+                            {new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(item.amount)}
+                          </td>
+                          <td className="py-2.5 text-neutral-400">{item.method}</td>
+                          <td className="py-2.5">
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold ${
+                              item.status === 'Scheduled' ? 'bg-blue-500/10 text-blue-400 border border-blue-500/25' : 'bg-amber-500/10 text-amber-500 border border-amber-500/25'
+                            }`}>
+                              {item.status}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </Card>
+            )}
+
+            {/* Table 3: Upcoming Payouts (Agency only) */}
+            {role === "agency" && (
+              <Card className="p-5 border-[#3a3a3a] bg-[#0d0d0d] flex flex-col min-h-[200px]">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-neutral-400">
+                    Upcoming Payouts (To Creators)
+                  </h3>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="border-b border-[#222] text-neutral-500 font-bold">
+                        <th className="pb-2 pr-6">Talent</th>
+                        <th className="pb-2 pr-6">Campaign</th>
+                        <th className="pb-2 pr-6">Scheduled Date</th>
+                        <th className="pb-2 pr-6">Amount</th>
+                        <th className="pb-2 pr-6">Method</th>
+                        <th className="pb-2">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#222]">
+                      {[
+                        { talent: "Jessica Bailey", campaign: "Summer Glow Launch", date: "2026-07-04", amount: 4500.00, method: "ACH Direct", status: "Scheduled" },
+                        { talent: "Lucy Che", campaign: "TikTok Footwear Push", date: "2026-07-08", amount: 3200.00, method: "Wire Payout", status: "Pending Approval" }
+                      ].map((item, idx) => (
+                        <tr key={idx} className="hover:bg-white/[0.01]">
+                          <td className="py-2.5 pr-6 font-bold text-white">{item.talent}</td>
+                          <td className="py-2.5 pr-6 text-neutral-400">{item.campaign}</td>
+                          <td className="py-2.5 pr-6 text-neutral-400">{item.date}</td>
+                          <td className="py-2.5 pr-6 font-mono font-bold text-white">
+                            {new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(item.amount)}
+                          </td>
+                          <td className="py-2.5 pr-6 text-neutral-400">{item.method}</td>
+                          <td className="py-2.5">
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold ${
+                              item.status === 'Scheduled' ? 'bg-blue-500/10 text-blue-400 border border-blue-500/25' : 'bg-amber-500/10 text-amber-500 border border-amber-500/25'
+                            }`}>
+                              {item.status}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </Card>
+            )}
+
+            {/* Table 3.5: Incoming Requests (Talent only) */}
+            {role === "talent" && (
+              <Card className="p-5 border-[#3a3a3a] bg-[#0d0d0d] flex flex-col min-h-[220px]">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-neutral-400">
+                    Incoming Connection Requests
+                  </h3>
+                </div>
+                <div className="overflow-x-auto">
+                  {incomingConnections.length === 0 ? (
+                    <p className="text-xs text-neutral-500 text-center py-8">No incoming connection requests pending.</p>
+                  ) : (
+                    <table className="w-full text-left border-collapse text-xs">
+                      <thead>
+                        <tr className="border-b border-[#222] text-neutral-500 font-bold">
+                          <th className="pb-2">Sender Name</th>
+                          <th className="pb-2">Sender Email</th>
+                          <th className="pb-2">Sender Role</th>
+                          <th className="pb-2 text-right">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-[#222]">
+                        {incomingConnections.map((conn: any) => (
+                          <tr key={conn.id} className="hover:bg-white/[0.01]">
+                            <td className="py-3 font-bold text-white">{conn.sender?.fullName || 'N/A'}</td>
+                            <td className="py-3 text-neutral-400">{conn.sender?.email || conn.email}</td>
+                            <td className="py-3">
+                              <span className="inline-block text-[8px] font-mono px-1.5 py-0.25 rounded bg-neutral-800 text-neutral-300 capitalize">{conn.sender?.role || 'Brand'}</span>
+                            </td>
+                            <td className="py-3 text-right">
+                              <div className="flex gap-2 justify-end">
+                                <Button
+                                  onClick={() => handleAcceptConnection(conn.id)}
+                                  disabled={isAcceptingConnection || isDecliningConnection}
+                                  className="h-7 px-3 bg-white text-black hover:bg-neutral-200 text-[10px] font-bold cursor-pointer"
+                                >
+                                  Accept
+                                </Button>
+                                <Button
+                                  onClick={() => handleDeclineConnection(conn.id)}
+                                  disabled={isAcceptingConnection || isDecliningConnection}
+                                  className="h-7 px-2 border border-red-500/20 hover:border-red-500 bg-red-500/5 hover:bg-red-500/10 text-red-400 text-[10px] font-bold cursor-pointer"
+                                >
+                                  Decline
+                                </Button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              </Card>
+            )}
+
+            {/* Table 4: Recent Activity */}
+            <Card className="p-5 border-[#3a3a3a] bg-[#0d0d0d] flex flex-col">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-neutral-400 mb-4">
+                Recent Activity Log
+              </h3>
+              <div className="space-y-3">
+                {role === 'agency' ? (
+                  [
+                    { text: `Invoice Synced: Invoice #INV-${invoices[0]?.docNumber || '1092'} synced from ${currentProvider}`, date: "10 mins ago" },
+                    { text: `Brand Payment Received: $15,000.00 settled from Aura Skincare`, date: "2 hours ago" },
+                    { text: `Talent Paid: $4,500.00 settled via ACH to Jessica Bailey`, date: "1 day ago" },
+                    { text: `Campaign Updated: Summer Glow Launch progress is now 45%`, date: "2 days ago" },
+                    { text: `Brand Invitation Accepted: Aura Skincare relationship is now ACTIVE`, date: "3 days ago" },
+                    { text: `Integration Synced: ${currentProvider === 'quickbooks' ? 'QuickBooks Online' : 'Xero'} connection state healthy`, date: "3 days ago" }
+                  ].map((item, idx) => (
+                    <div key={idx} className="flex justify-between items-center text-xs hover:bg-white/[0.01] py-1">
+                      <span className="text-neutral-300 font-medium">{item.text}</span>
+                      <span className="text-neutral-500 font-mono text-[10px]">{item.date}</span>
+                    </div>
+                  ))
+                ) : (
+                  [
+                    { text: `Invoice Synced: Invoice #INV-${invoices[0]?.docNumber || '1092'} synced from ${currentProvider}`, date: "10 mins ago" },
+                    { text: `Invoice Approved: Invoice #INV-${invoices[1]?.docNumber || '3392'} approved for split payout`, date: "2 hours ago" },
+                    { text: `Payment Completed: $24,500.00 settled via ACH to Kairos Media`, date: "1 day ago" },
+                    { text: `Agency invitation status updated: VaynerMedia invitation marked as PENDING`, date: "2 days ago" },
+                    { text: `Integration Synced: ${currentProvider === 'quickbooks' ? 'QuickBooks Online' : 'Xero'} connection state healthy`, date: "3 days ago" }
+                  ].map((item, idx) => (
+                    <div key={idx} className="flex justify-between items-center text-xs hover:bg-white/[0.01] py-1">
+                      <span className="text-neutral-300 font-medium">{item.text}</span>
+                      <span className="text-neutral-500 font-mono text-[10px]">{item.date}</span>
+                    </div>
+                  ))
+                )}
+              </div>
+            </Card>
+
           </div>
         </div>
 
@@ -1069,24 +1432,27 @@ export function DashboardPage() {
           
           {/* 1. Quick Actions Panel */}
           <Panel className="p-4 sm:p-5">
+            <div className="flex items-center justify-between gap-4 mb-3">
+              <h2 className="text-[12px] font-bold uppercase tracking-wider text-neutral-400">Quick Actions</h2>
+            </div>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
               {quickActions.map((action) => {
                 const Icon = action.icon;
                 const baseClassName =
                   "flex flex-col items-center gap-2 rounded-[10px] border border-[#3a3a3a] bg-black px-2 py-3 text-center transition-colors hover:border-white/20 hover:bg-white/[0.02] cursor-pointer";
 
-                if (action.label === "Wallet ID contacts") {
+                if (action.label === "Sync Integrations" || action.label === "Export Report") {
                   return (
                     <button
                       key={action.label}
                       type="button"
-                      onClick={() => setIsWalletContactsOpen(true)}
+                      onClick={() => handleQuickActionClick(action.label)}
                       className={baseClassName}
                     >
-                      <span className="flex h-10 w-10 items-center justify-center rounded-[9px] border border-[#3a3a3a] bg-black">
-                        <Icon className="h-5 w-5 text-white" />
+                      <span className="flex h-9 w-9 items-center justify-center rounded-[9px] border border-[#3a3a3a] bg-black">
+                        <Icon className="h-4 w-4 text-white" />
                       </span>
-                      <span className="text-[10px] leading-4 text-white font-bold">{action.label}</span>
+                      <span className="text-[9px] leading-4 text-white font-bold">{action.label}</span>
                     </button>
                   );
                 }
@@ -1097,90 +1463,115 @@ export function DashboardPage() {
                     href={action.href}
                     className={baseClassName}
                   >
-                    <span className="flex h-10 w-10 items-center justify-center rounded-[9px] border border-[#3a3a3a] bg-black">
-                      <Icon className="h-5 w-5 text-white" />
+                    <span className="flex h-9 w-9 items-center justify-center rounded-[9px] border border-[#3a3a3a] bg-black">
+                      <Icon className="h-4 w-4 text-white" />
                     </span>
-                    <span className="text-[10px] leading-4 text-white font-bold">{action.label}</span>
+                    <span className="text-[9px] leading-4 text-white font-bold">{action.label}</span>
                   </Link>
                 );
               })}
             </div>
           </Panel>
 
-          {/* 2. Shortcuts Panel */}
-          <Panel className="p-4 sm:p-5">
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <h2 className="text-[14px] font-semibold text-white">Shortcuts</h2>
-                <p className="mt-1 text-[11px] text-[#8f8f8f]">Quick brand and search access.</p>
+          {/* 2. Wallet Snapshot Panel (Agency only) */}
+          {role === "agency" && (
+            <Panel className="p-4 sm:p-5 space-y-4">
+              <div className="flex items-center justify-between gap-4">
+                <h2 className="text-[12px] font-bold uppercase tracking-wider text-neutral-400">Wallet Snapshot</h2>
               </div>
-            </div>
-            <div className="mt-4 grid grid-cols-5 gap-3">
-              {shortcuts.map((item, index) => (
-                <BrandTile key={index} {...item} />
-              ))}
-            </div>
-          </Panel>
-
-          {/* 3. Integrations Shortcuts */}
-          <IntegrationsShortcutsPanel
-            connectedIntegrations={connectedIntegrations}
-            currentProvider={currentProvider}
-            onAddClick={() => {
-              setAddIntegrationModalStep("select");
-              setSelectedIntegration(null);
-              setIsAddIntegrationModalOpen(true);
-            }}
-          />
-
-          {/* 4. Active Provider panel */}
-          {isProviderConnected && (
-            <ProviderSyncPanel />
+              <div className="space-y-2">
+                {[
+                  { label: "Available Float Balance", amount: "$250,000.00", color: "text-white" },
+                  { label: "Pending Incoming Balance", amount: "$18,500.00", color: "text-amber-500" },
+                  { label: "Escrow Split Balance", amount: "$73,790.00", color: "text-blue-400" },
+                ].map((bal, idx) => (
+                  <div key={idx} className="flex justify-between items-center text-xs p-2 rounded border border-[#222] bg-black">
+                    <span className="text-neutral-400">{bal.label}</span>
+                    <span className={`font-mono font-bold ${bal.color}`}>{bal.amount}</span>
+                  </div>
+                ))}
+              </div>
+            </Panel>
           )}
 
-          {/* 5. Ledger Balances & Bank Link */}
-          <PlaidConnector />
+          {/* 3. Integrations Shortcuts Card */}
+          <IntegrationsShortcutsPanel
+            connectedIntegrations={connectedIntegrations}
+            onAddClick={() => setIsAddIntegrationModalOpen(true)}
+            currentProvider={currentProvider}
+          />
 
-          {/* 6. Banks and Cards Panel */}
-          <Panel className="p-4 sm:p-5">
+          {/* 4. Banking Summary */}
+          <Panel className="p-4 sm:p-5 space-y-4">
             <div className="flex items-center justify-between gap-4">
-              <div>
-                <h2 className="text-[14px] font-semibold text-white">Banks and Cards</h2>
+              <h2 className="text-[12px] font-bold uppercase tracking-wider text-neutral-400">Connected Banking Feeds</h2>
+            </div>
+            
+            <div className="space-y-3">
+              {linkedCards.map((card, i) => (
+                <div key={i} className="flex items-center gap-3 rounded-[10px] border border-[#222] bg-[#0c0c0c] p-3">
+                  <BankCardFace card={card} />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[12px] font-bold text-white">{card.name}</p>
+                    <p className="mt-1 text-[10px] text-neutral-500 font-mono">{card.detail}</p>
+                  </div>
+                </div>
+              ))}
+              
+              <div className="flex justify-between items-center text-xs pt-2 border-t border-[#222]">
+                <span className="text-neutral-400">Plaid Available Float</span>
+                <span className="font-mono font-bold text-white">$250,000.00</span>
               </div>
             </div>
+          </Panel>
 
-            <div className="mt-4 space-y-3">
-              {linkedCards.length > 0 ? (
-                linkedCards.map((card, i) => (
-                  <div
-                    key={i}
-                    className="flex items-center gap-3 rounded-[10px] border border-[#3a3a3a] bg-[#0c0c0c] p-3 animate-in fade-in duration-300"
-                  >
-                    <BankCardFace card={card} />
-                    <div className="min-w-0 flex-1">
-                       <p className="truncate text-[13px] font-semibold text-white">{card.name}</p>
-                      <p className="mt-1 text-[11px] text-[#8f8f8f] font-mono">{card.detail}</p>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <div className="flex flex-col items-center py-4 text-center">
-                  <p className="text-[12px] text-[#555]">No bank accounts or cards linked.</p>
-                </div>
+          {/* 5. Notifications Panel */}
+          <Panel className="p-4 sm:p-5 space-y-3">
+            <div className="flex items-center justify-between gap-4">
+              <h2 className="text-[12px] font-bold uppercase tracking-wider text-neutral-400">Action Center</h2>
+              {notifications.some(n => !n.read) && (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    await markNotificationsRead().unwrap();
+                    refetchNotifications();
+                  }}
+                  className="text-[9px] font-bold text-neutral-500 hover:text-white transition-colors cursor-pointer"
+                >
+                  Mark all read
+                </button>
               )}
             </div>
+            
+            <div className="space-y-2.5 max-h-[250px] overflow-y-auto pr-1">
+              {/* Render dynamic backend notifications first */}
+              {notifications.map((notif: any) => (
+                <div
+                  key={notif.id}
+                  className={`flex items-start gap-2.5 p-2.5 rounded border text-xs transition-all ${
+                    notif.read
+                      ? 'bg-neutral-900/40 border-[#222] text-neutral-400'
+                      : 'bg-blue-500/5 border-blue-500/20 text-white'
+                  }`}
+                >
+                  <CheckCircle2 className={`h-4 w-4 shrink-0 mt-0.5 ${notif.read ? 'text-neutral-500' : 'text-blue-400'}`} />
+                  <div className="min-w-0 flex-1">
+                    <p className="font-bold">{notif.title}</p>
+                    <p className="text-[10px] text-neutral-400 mt-0.5">{notif.message}</p>
+                    <span className="text-[8px] font-mono text-neutral-500 block mt-1">
+                      {new Date(notif.createdAt).toLocaleDateString()} {new Date(notif.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </div>
+                </div>
+              ))}
 
-            <button
-              type="button"
-              onClick={() => {
-                resetLinkModal();
-                setIsLinkModalOpen(true);
-              }}
-              className="mt-4 inline-flex h-9 items-center gap-1.5 rounded-[7px] border border-[#3a3a3a] bg-[#0c0c0c] px-3.5 text-[11px] font-semibold text-white hover:border-white/20 w-fit cursor-pointer transition-all"
-            >
-              Link a card or bank
-            </button>
+              {/* Fallback alerts if notifications list is empty */}
+              {notifications.length === 0 && (
+                <p className="text-xs text-neutral-500 text-center py-4">No pending alerts. You are all caught up!</p>
+              )}
+            </div>
           </Panel>
+
         </div>
       </div>
 

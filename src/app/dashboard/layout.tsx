@@ -20,6 +20,11 @@ import {
   Loader2,
   ArrowDownLeft,
   ArrowUpRight,
+  Wallet,
+  BarChart3,
+  Settings,
+  Building,
+  Send,
 } from "lucide-react";
 import { Button } from "@/shared/components/ui/Button";
 import { cn } from "@/shared/lib/utils";
@@ -87,21 +92,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     { id: "sage", name: "Sage", color: "#00783C", isFuture: true },
   ];
 
-  const subItems = [
-    { name: "Dashboard", hrefSuffix: "dashboard", icon: LayoutDashboard },
-    { name: "Invoices", hrefSuffix: "invoices", icon: Receipt },
-    { name: "Income", hrefSuffix: "income", icon: ArrowDownLeft },
-    { name: "Payouts", hrefSuffix: "payouts", icon: ArrowUpRight },
-  ];
-
-  const globalNavigationItems = [
-    { name: "Split Payments", href: "/dashboard/splits", icon: GitFork },
-    { name: "Team Settings", href: "/dashboard/team", icon: Users },
-    ...(userRole !== "talent"
-      ? [{ name: "Integrations", href: "/dashboard/integrations", icon: Link2 }]
-      : []),
-  ];
-
   const renderTopbarStatus = () => {
     const connectedProviders = providerList.filter((p) => connectionStatuses[p.id as ProviderType]?.connected);
     const erroredProviders = providerList.filter((p) => !!providerErrors[p.id as ProviderType]);
@@ -147,134 +137,76 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     );
   };
 
+  const brandNavigationItems = [
+    { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+    { name: "Invoices", href: "/dashboard/invoices", icon: Receipt },
+    { name: "Payments", href: "/dashboard/payments", icon: ArrowUpRight },
+    { name: "Agencies", href: "/dashboard/agencies", icon: Users },
+    { name: "Talents", href: "/dashboard/talents", icon: Users },
+    { name: "Campaigns / Projects", href: "/dashboard/campaigns", icon: Briefcase },
+    { name: "Wallet", href: "/dashboard/wallet", icon: Wallet },
+    { name: "Reports & Analytics", href: "/dashboard/reports", icon: BarChart3 },
+    { name: "Integrations", href: "/dashboard/integrations", icon: Link2 },
+    { name: "Settings", href: "/dashboard/settings", icon: Settings },
+  ];
+
+  const agencyNavigationItems = [
+    { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+    { name: "Brands", href: "/dashboard/brands", icon: Building },
+    { name: "Campaigns", href: "/dashboard/campaigns", icon: Briefcase },
+    { name: "Invoices", href: "/dashboard/invoices", icon: Receipt },
+    { name: "Payments", href: "/dashboard/payments", icon: ArrowUpRight },
+    { name: "Payouts", href: "/dashboard/payouts", icon: Send },
+    { name: "Talents", href: "/dashboard/talents", icon: Users },
+    { name: "Wallet", href: "/dashboard/wallet", icon: Wallet },
+    { name: "Reports & Analytics", href: "/dashboard/reports", icon: BarChart3 },
+    { name: "Integrations", href: "/dashboard/integrations", icon: Link2 },
+    { name: "Settings", href: "/dashboard/settings", icon: Settings },
+  ];
+
+  const talentNavigationItems = [
+    { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+    { name: "Invoices", href: "/dashboard/invoices", icon: Receipt },
+    { name: "Wallet", href: "/dashboard/wallet", icon: Wallet },
+    { name: "Settings", href: "/dashboard/settings", icon: Settings },
+  ];
+
+  const navigationItems = 
+    userRole === "agency" ? agencyNavigationItems : 
+    userRole === "talent" ? talentNavigationItems : 
+    brandNavigationItems;
+
+  const sectionTitle = 
+    userRole === "agency" ? "Agency Management" : 
+    userRole === "talent" ? "Talent Management" : 
+    "Brand Management";
+
   const renderNavList = (onItemClick?: () => void) => {
     return (
-      <div className="space-y-4">
-        {/* Providers Section */}
-        <div>
-          <span className="block px-3.5 mb-2 text-[10px] font-bold uppercase tracking-wider text-neutral-500">
-            Accounting Providers
-          </span>
-          <div className="space-y-1.5">
-            {providerList.map((p) => {
-              const isExpanded = expandedProviders[p.id];
-              const isConnected = !!connectionStatuses[p.id as ProviderType]?.connected;
-              const hasError = !!providerErrors[p.id as ProviderType];
-              const errorMessage = providerErrors[p.id as ProviderType];
-              
-              return (
-                <div key={p.id} className="space-y-1">
-                  {/* Provider Header Button */}
-                  <button
-                    onClick={() => toggleProvider(p.id)}
-                    className="flex w-full items-center justify-between rounded-lg px-3.5 py-2.5 text-xs font-bold text-neutral-400 hover:bg-white/[0.03] hover:text-white transition-all cursor-pointer"
-                  >
-                    <div className="flex items-center gap-2.5">
-                      {/* Connection indicator dot */}
-                      <span
-                        className={cn(
-                          "h-2 w-2 rounded-full transition-all duration-300",
-                          hasError 
-                            ? "bg-red-500 animate-pulse" 
-                            : isConnected 
-                            ? "bg-emerald-500" 
-                            : "bg-neutral-700"
-                        )}
-                        style={isConnected && !hasError ? { backgroundColor: p.color } : undefined}
-                        title={hasError ? errorMessage || "Failed to load status" : undefined}
-                      />
-                      <span>
-                        {p.name} {p.isFuture && <span className="text-[9px] font-semibold text-neutral-600 font-sans ml-0.5">(Future)</span>}
-                      </span>
-                    </div>
-                    {isExpanded ? (
-                      <ChevronDown className="h-3.5 w-3.5 text-neutral-500" />
-                    ) : (
-                      <ChevronRight className="h-3.5 w-3.5 text-neutral-500" />
-                    )}
-                  </button>
-
-                  {/* Render error description underneath name if sync fails */}
-                  {hasError && (
-                    <span 
-                      className="block text-[9px] font-bold text-red-500/80 pl-8 pb-1 max-w-[210px] truncate"
-                      title={errorMessage || "Failed to load status"}
-                    >
-                      ⚠️ {errorMessage}
-                    </span>
-                  )}
-
-                  {/* Provider Sub-items */}
-                  {isExpanded && (
-                    <div className="space-y-1 pl-4 border-l border-[#222] ml-4 animate-in fade-in slide-in-from-top-1 duration-150">
-                      {subItems.map((sub) => {
-                        const targetHref = `/providers/${p.id}/${sub.hrefSuffix}`;
-                        const isActive = pathname === targetHref;
-                        const SubIcon = sub.icon;
-
-                        let activeStyle = "bg-white text-black hover:bg-neutral-200";
-                        if (isActive) {
-                          if (p.id === "quickbooks") {
-                            activeStyle = "bg-[#2CA01C]/10 text-white border-l border-[#2CA01C]";
-                          } else if (p.id === "xero") {
-                            activeStyle = "bg-[#13B5EA]/10 text-white border-l border-[#13B5EA]";
-                          } else if (p.id === "sage") {
-                            activeStyle = "bg-[#00783C]/10 text-white border-l border-[#00783C]";
-                          }
-                        }
-
-                        return (
-                          <Link
-                            key={sub.name}
-                            href={targetHref}
-                            onClick={onItemClick}
-                            className={cn(
-                              "flex items-center gap-2.5 rounded-md px-3 py-2 text-[11px] font-bold transition-all",
-                              isActive
-                                ? activeStyle
-                                : "text-neutral-500 hover:text-white hover:bg-white/[0.02]"
-                            )}
-                          >
-                            <SubIcon className="h-3.5 w-3.5 shrink-0" />
-                            {sub.name}
-                          </Link>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Global Platform Section */}
-        <div className="border-t border-[#1a1a1a] pt-4">
-          <span className="block px-3.5 mb-2 text-[10px] font-bold uppercase tracking-wider text-neutral-500">
-            Platform Core
-          </span>
-          <div className="space-y-1.5">
-            {globalNavigationItems.map((item) => {
-              const Icon = item.icon;
-              const isActive = pathname === item.href;
-              return (
-                <Link
-                  key={item.name}
-                  href={item.href}
-                  onClick={onItemClick}
-                  className={`flex items-center gap-3 rounded-lg px-3.5 py-2.5 text-xs font-bold transition-all hover:text-white ${
-                    isActive
-                      ? "bg-white text-black hover:bg-neutral-200"
-                      : "text-neutral-400 hover:bg-white/[0.03]"
-                  }`}
-                >
-                  <Icon className="h-4 w-4 shrink-0" />
-                  {item.name}
-                </Link>
-              );
-            })}
-          </div>
-        </div>
+      <div className="space-y-1.5">
+        <span className="block px-3.5 mb-3 text-[10px] font-bold uppercase tracking-wider text-neutral-500">
+          {sectionTitle}
+        </span>
+        {navigationItems.map((item) => {
+          const Icon = item.icon;
+          const isActive = pathname === item.href;
+          return (
+            <Link
+              key={item.name}
+              href={item.href}
+              onClick={onItemClick}
+              className={cn(
+                "flex items-center gap-3 rounded-lg px-3.5 py-2.5 text-xs font-bold transition-all hover:text-white",
+                isActive
+                  ? "bg-white text-black hover:bg-neutral-200"
+                  : "text-neutral-400 hover:bg-white/[0.03]"
+              )}
+            >
+              <Icon className="h-4 w-4 shrink-0" />
+              {item.name}
+            </Link>
+          );
+        })}
       </div>
     );
   };
