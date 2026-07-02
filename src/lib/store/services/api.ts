@@ -15,7 +15,13 @@ export const api = createApi({
     prepareHeaders: (headers, { getState }) => {
       // Pull token from the auth slice
       const state = getState() as { auth: { token: string | null } };
-      const token = state.auth?.token;
+      let token = state.auth?.token;
+      
+      // Fallback to localStorage to prevent race conditions during hydration
+      if (!token && typeof window !== 'undefined') {
+        token = localStorage.getItem('agncypay_token');
+      }
+
       if (token) {
         headers.set('authorization', `Bearer ${token}`);
       }
@@ -184,6 +190,18 @@ export const api = createApi({
       }),
       invalidatesTags: ['Notification'],
     }),
+    getConnectedPartners: builder.query<any[], void>({
+      query: () => '/connections/partners',
+      transformResponse: (response: { success: boolean; data: any[] }) => response.data || [],
+      providesTags: ['Agency', 'Talent'],
+    }),
+    deleteRelationship: builder.mutation<any, string>({
+      query: (id) => ({
+        url: `/connections/relationship/${id}`,
+        method: 'DELETE',
+      }),
+      invalidatesTags: ['Invitation', 'TalentInvitation', 'Agency', 'Talent', 'Notification'],
+    }),
 
     // --- Invoices & Balances ---
     getInvoicesByWallet: builder.query<any[], { walletId: string; limit?: number; offset?: number }>({
@@ -201,6 +219,11 @@ export const api = createApi({
       query: (walletId) => `/wallets/${walletId}/balances`,
       transformResponse: (response: { success: boolean; data: any }) => response.data || null,
       providesTags: ['Wallet'],
+    }),
+    getPaymentsByWallet: builder.query<any[], { walletId: string; limit?: number; offset?: number }>({
+      query: ({ walletId, limit = 20, offset = 0 }) => 
+        `/payments/wallet/${walletId}?limit=${limit}&offset=${offset}`,
+      transformResponse: (response: { success: boolean; data: any[] }) => response.data || [],
     }),
   }),
 });
@@ -234,4 +257,7 @@ export const {
   useGetInvoicesByWalletQuery,
   useGetInvoicesPreviewQuery,
   useGetWalletBalancesQuery,
+  useGetConnectedPartnersQuery,
+  useDeleteRelationshipMutation,
+  useGetPaymentsByWalletQuery,
 } = api;

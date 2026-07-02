@@ -26,13 +26,18 @@ export async function GET(
     
     if (res.ok) {
       const data = await res.json();
-      return NextResponse.json(data, { status: res.status });
+      // If the local DB returned data: null, we should fall back.
+      if (data.data) {
+        return NextResponse.json(data, { status: res.status });
+      }
+      console.log(`[Proxy] Local payment returned null data. Proceeding to fallback...`);
     }
 
     // Fallback: Check if it is a QuickBooks invoice
     try {
       console.log(`[Proxy] Local payment not found. Querying QuickBooks invoices as fallback...`);
       const qbRes = await fetch(`${BACKEND_URL}/quickbooks/invoices`, {
+        headers: authHeader ? { Authorization: authHeader } : {},
         cache: "no-store",
       });
       
@@ -43,28 +48,35 @@ export async function GET(
         console.log(`[Proxy] QuickBooks invoices count: ${qbData.invoices?.length}`);
         
         const qbInvoice = qbData.invoices?.find((inv: any) => {
-          // Compare both invoice string ID and document number
-          return String(inv.id) === String(id) || String(inv.docNumber) === String(id);
+          const invId = inv.id || inv.Id || inv.InvoiceID || "";
+          const invDoc = inv.docNumber || inv.DocNumber || inv.InvoiceNumber || "";
+          return String(invId).toLowerCase() === String(id).toLowerCase() || 
+                 String(invDoc).toLowerCase() === String(id).toLowerCase();
         });
         
         if (qbInvoice) {
           console.log(`[Proxy] Found matching QuickBooks invoice:`, qbInvoice);
+          const invId = qbInvoice.id || qbInvoice.Id || qbInvoice.InvoiceID;
+          const invDoc = qbInvoice.docNumber || qbInvoice.DocNumber || qbInvoice.InvoiceNumber;
+          const invAmount = qbInvoice.amount || qbInvoice.Total || 0;
+          const invStatus = qbInvoice.status || qbInvoice.Status || "Pending";
+          
           const mappedPayment = {
-            id: qbInvoice.id,
-            invoiceId: qbInvoice.docNumber,
-            externalId: `QBO-${qbInvoice.id}`,
+            id: invId,
+            invoiceId: invDoc,
+            externalId: `QBO-${invId}`,
             source: "QUICKBOOKS",
-            amount: qbInvoice.amount.toString(),
+            amount: invAmount.toString(),
             currency: "USD",
-            status: qbInvoice.status === "Paid" ? "SETTLED" : "PENDING",
-            settledAmount: qbInvoice.status === "Paid" ? qbInvoice.amount.toString() : null,
+            status: String(invStatus).toLowerCase() === "paid" ? "SETTLED" : "PENDING",
+            settledAmount: String(invStatus).toLowerCase() === "paid" ? invAmount.toString() : null,
             settledAt: null,
             invoiceData: {
-              clientName: qbInvoice.name,
-              description: qbInvoice.detail,
-              dueDate: qbInvoice.date,
+              clientName: qbInvoice.name || qbInvoice.ContactName || "Unknown Customer",
+              description: qbInvoice.detail || qbInvoice.Reference || "QuickBooks Synced Invoice",
+              dueDate: qbInvoice.date || qbInvoice.Date,
             },
-            description: qbInvoice.detail,
+            description: qbInvoice.detail || qbInvoice.Reference || "QuickBooks Synced Invoice",
             metadata: null,
             splits: [],
             createdAt: new Date().toISOString(),
@@ -84,6 +96,7 @@ export async function GET(
     try {
       console.log(`[Proxy] Local payment not found. Querying Xero invoices as fallback...`);
       const xeroRes = await fetch(`${BACKEND_URL}/xero/invoices`, {
+        headers: authHeader ? { Authorization: authHeader } : {},
         cache: "no-store",
       });
       
@@ -94,27 +107,35 @@ export async function GET(
         console.log(`[Proxy] Xero invoices count: ${xeroData.invoices?.length}`);
         
         const xeroInvoice = xeroData.invoices?.find((inv: any) => {
-          return String(inv.InvoiceID) === String(id) || String(inv.InvoiceNumber) === String(id);
+          const invId = inv.InvoiceID || inv.InvoiceId || inv.id || "";
+          const invDoc = inv.InvoiceNumber || inv.InvoiceNo || inv.docNumber || "";
+          return String(invId).toLowerCase() === String(id).toLowerCase() || 
+                 String(invDoc).toLowerCase() === String(id).toLowerCase();
         });
         
         if (xeroInvoice) {
           console.log(`[Proxy] Found matching Xero invoice:`, xeroInvoice);
+          const invId = xeroInvoice.InvoiceID || xeroInvoice.InvoiceId || xeroInvoice.id;
+          const invDoc = xeroInvoice.InvoiceNumber || xeroInvoice.InvoiceNo || xeroInvoice.docNumber;
+          const invAmount = xeroInvoice.Total || xeroInvoice.amount || 0;
+          const invStatus = xeroInvoice.Status || xeroInvoice.status || "Pending";
+          
           const mappedPayment = {
-            id: xeroInvoice.InvoiceID,
-            invoiceId: xeroInvoice.InvoiceNumber,
-            externalId: `XERO-${xeroInvoice.InvoiceID}`,
+            id: invId,
+            invoiceId: invDoc,
+            externalId: `XERO-${invId}`,
             source: "XERO",
-            amount: xeroInvoice.Total.toString(),
+            amount: invAmount.toString(),
             currency: "USD",
-            status: xeroInvoice.Status === "PAID" ? "SETTLED" : "PENDING",
-            settledAmount: xeroInvoice.Status === "PAID" ? xeroInvoice.Total.toString() : null,
+            status: String(invStatus).toUpperCase() === "PAID" ? "SETTLED" : "PENDING",
+            settledAmount: String(invStatus).toUpperCase() === "PAID" ? invAmount.toString() : null,
             settledAt: null,
             invoiceData: {
-              clientName: xeroInvoice.ContactName,
-              description: xeroInvoice.Reference,
-              dueDate: xeroInvoice.Date,
+              clientName: xeroInvoice.ContactName || xeroInvoice.name || "Unknown Contact",
+              description: xeroInvoice.Reference || xeroInvoice.detail || "Xero Synced Invoice",
+              dueDate: xeroInvoice.Date || xeroInvoice.date,
             },
-            description: xeroInvoice.Reference,
+            description: xeroInvoice.Reference || xeroInvoice.detail || "Xero Synced Invoice",
             metadata: null,
             splits: [],
             createdAt: new Date().toISOString(),

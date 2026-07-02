@@ -2,7 +2,7 @@
 
 import React, { useCallback, useState, useEffect } from "react";
 import Link from "next/link";
-import { CheckCircle2, ArrowRight, Loader2, Unplug, X, Plug } from "lucide-react";
+import { CheckCircle2, ArrowRight, Loader2, Unplug, X, Plug, ChevronLeft } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
 import { Button } from "@/shared/components/ui/Button";
 
@@ -35,28 +35,12 @@ const defaultProviders: ERPProvider[] = [
     primaryColor: "#13B5EA", // Xero Blue
   },
   {
-    id: "mercury",
-    name: "Mercury",
-    description: "Sync banking activity, card spend, transfers, and treasury movements from Mercury.",
-    logoUrl: "/mercuryLogo.png",
+    id: "plaid",
+    name: "Plaid",
+    description: "Link bank feeds to check available cash balances, transaction logs, and treasury operations.",
+    logoUrl: "https://www.google.com/s2/favicons?domain=plaid.com&sz=128",
     status: "Not Connected",
-    primaryColor: "#5A5F66",
-  },
-  {
-    id: "netsuite",
-    name: "Oracle NetSuite",
-    description: "Enterprise grade syncing for complex chart of accounts and multi-entity setups.",
-    logoUrl: "https://www.google.com/s2/favicons?domain=netsuite.com&sz=128",
-    status: "Not Connected",
-    primaryColor: "#000000",
-  },
-  {
-    id: "sage",
-    name: "Sage Intacct",
-    description: "Automate financial reporting and sync payables effortlessly to Sage.",
-    logoUrl: "https://www.google.com/s2/favicons?domain=sage.com&sz=128",
-    status: "Not Connected",
-    primaryColor: "#000000",
+    primaryColor: "#0A5CFF", // Plaid Blue
   }
 ];
 
@@ -172,6 +156,7 @@ export default function IntegrationsPage() {
   const [activeOAuth, setActiveOAuth] = useState<ERPProvider | null>(null);
   const [checkingQuickBooks, setCheckingQuickBooks] = useState(true);
   const [checkingXero, setCheckingXero] = useState(true);
+  const [checkingPlaid, setCheckingPlaid] = useState(true);
   const [disconnectingId, setDisconnectingId] = useState<string | null>(null);
 
   const connectQuickBooks = () => {
@@ -185,6 +170,7 @@ export default function IntegrationsPage() {
   const refreshStatuses = useCallback(async () => {
     setCheckingQuickBooks(true);
     setCheckingXero(true);
+    setCheckingPlaid(true);
     const mockConnectedIds = readMockConnectedProviderIds();
 
     // Check QuickBooks Status
@@ -215,6 +201,20 @@ export default function IntegrationsPage() {
       setCheckingXero(false);
     }
 
+    // Check Plaid Status
+    let plaidConnected = false;
+    try {
+      const res = await fetch("/api/plaid/status", { cache: "no-store" });
+      if (res.ok) {
+        const data = await res.json();
+        plaidConnected = !!data.connected;
+      }
+    } catch (err) {
+      console.error("Failed to fetch Plaid status:", err);
+    } finally {
+      setCheckingPlaid(false);
+    }
+
     setProviders(current =>
       current.map(p => {
         if (p.id === "quickbooks") {
@@ -222,6 +222,9 @@ export default function IntegrationsPage() {
         }
         if (p.id === "xero") {
           return { ...p, status: xeroConnected ? "Connected" : "Not Connected" };
+        }
+        if (p.id === "plaid") {
+          return { ...p, status: plaidConnected ? "Connected" : "Not Connected" };
         }
         return { ...p, status: mockConnectedIds.has(p.id) ? "Connected" : "Not Connected" };
       })
@@ -232,14 +235,25 @@ export default function IntegrationsPage() {
     refreshStatuses();
   }, [refreshStatuses]);
 
-  const handleConnectSuccess = (providerId: string) => {
-    if (providerId !== "quickbooks" && providerId !== "xero") {
+  const handleConnectSuccess = async (providerId: string) => {
+    if (providerId === "plaid") {
+      try {
+        await fetch("/api/plaid/exchange-token", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            public_token: "mock-public-token-12345",
+            institution: { name: "Plaid Sandbox Bank", institution_id: "ins_sandbox" },
+          }),
+        });
+      } catch (err) {
+        console.error("Failed to exchange mock Plaid token:", err);
+      }
+    } else if (providerId !== "quickbooks" && providerId !== "xero") {
       writeMockConnectedProviderId(providerId, true);
     }
 
-    setProviders(current =>
-      current.map(p => p.id === providerId ? { ...p, status: "Connected" } : p)
-    );
+    await refreshStatuses();
     setActiveOAuth(null);
   };
 
@@ -257,6 +271,10 @@ export default function IntegrationsPage() {
         const res = await fetch("/api/xero/disconnect", { method: "POST" });
         if (!res.ok) throw new Error("Failed to disconnect Xero.");
         await refreshStatuses();
+      } else if (provider.id === "plaid") {
+        const res = await fetch("/api/plaid/disconnect", { method: "POST" });
+        if (!res.ok) throw new Error("Failed to disconnect Plaid.");
+        await refreshStatuses();
       } else {
         writeMockConnectedProviderId(provider.id, false);
         setProviders(current =>
@@ -272,6 +290,15 @@ export default function IntegrationsPage() {
 
   return (
     <div className="space-y-6 select-text">
+      <div>
+        <Link 
+          href="/dashboard"
+          className="inline-flex items-center gap-1 text-xs font-bold text-neutral-500 hover:text-white transition-colors mb-4"
+        >
+          <ChevronLeft className="h-4 w-4" />
+          Back to Dashboard
+        </Link>
+      </div>
       <div>
         <h2 className="text-xl font-bold tracking-tight text-white">Integrations Marketplace</h2>
         <p className="text-xs font-semibold text-neutral-400 mt-1">
@@ -296,7 +323,7 @@ export default function IntegrationsPage() {
                     <CheckCircle2 className="h-[14px] w-[14px] text-green-500" />
                     <span className="text-[12px] font-bold text-green-500">Connected</span>
                   </div>
-                ) : (checkingQuickBooks && provider.id === "quickbooks") || (checkingXero && provider.id === "xero") ? (
+                ) : (checkingQuickBooks && provider.id === "quickbooks") || (checkingXero && provider.id === "xero") || (checkingPlaid && provider.id === "plaid") ? (
                   <div className="flex items-center gap-[6px] rounded-full border border-[#3a3a3a] bg-[#222] px-[10px] py-[4px]">
                     <Loader2 className="h-[14px] w-[14px] animate-spin text-[#9b9b9b]" />
                     <span className="text-[12px] font-bold text-[#9b9b9b]">Checking</span>
@@ -314,13 +341,26 @@ export default function IntegrationsPage() {
               <p className="mt-[8px] text-[12px] leading-[18px] text-[#8d8d8d]">
                 {provider.description}
               </p>
+
+              {provider.status === "Connected" && (
+                <div className="mt-4 pt-3 border-t border-[#222] grid grid-cols-2 gap-2 text-[10px] text-[#8d8d8d]">
+                  <div>
+                    <span className="block text-neutral-500 font-bold uppercase tracking-wider text-[8px]">Last Sync</span>
+                    <span className="text-neutral-300 font-medium">Just now</span>
+                  </div>
+                  <div>
+                    <span className="block text-neutral-500 font-bold uppercase tracking-wider text-[8px]">Sync Health</span>
+                    <span className="text-green-400 font-bold">Healthy</span>
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="mt-[28px] flex items-center gap-3">
               {provider.status === "Connected" ? (
                 <>
                   <Link
-                    href={provider.id === "quickbooks" ? "/dashboard/quickbooks" : provider.id === "xero" ? "/providers/xero/dashboard" : "#"}
+                    href={provider.id === "quickbooks" ? "/dashboard/quickbooks" : provider.id === "xero" ? "/providers/xero/dashboard" : provider.id === "plaid" ? "/dashboard/wallet" : "#"}
                     className="flex h-[38px] flex-1 items-center justify-center gap-[8px] rounded-[7px] border border-[#3a3a3a] bg-[#1a1a1a] text-[13px] font-bold text-white transition-colors hover:bg-[#2a2a2a] hover:border-white/20"
                   >
                     Configure Sync
@@ -360,7 +400,7 @@ export default function IntegrationsPage() {
                   className="flex-1 h-[38px] text-[13px] font-bold gap-2"
                 >
                   <Plug className="h-4 w-4 text-black" />
-                  Connect
+                  Connect {provider.name}
                 </Button>
               )}
             </div>

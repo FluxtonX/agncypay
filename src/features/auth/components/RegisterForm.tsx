@@ -4,7 +4,7 @@ import React, { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { registerSchema, RegisterInput } from "../schemas/auth";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { AlertCircle, Check, CheckCircle2, Eye, EyeOff, ShieldCheck } from "lucide-react";
@@ -30,11 +30,12 @@ interface FieldProps {
   placeholder?: string;
   error?: string;
   autoComplete?: string;
+  readOnly?: boolean;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   register: any;
 }
 
-function Field({ id, label, type = "text", placeholder, error, autoComplete, register }: FieldProps) {
+function Field({ id, label, type = "text", placeholder, error, autoComplete, readOnly, register }: FieldProps) {
   const [showPassword, setShowPassword] = useState(false);
   const isPassword = type === "password";
   const resolvedType = isPassword ? (showPassword ? "text" : "password") : type;
@@ -50,9 +51,10 @@ function Field({ id, label, type = "text", placeholder, error, autoComplete, reg
           type={resolvedType}
           autoComplete={autoComplete}
           placeholder={placeholder}
+          readOnly={readOnly}
           className={`w-full rounded-lg border bg-[#0B0B0B] px-4 py-3 text-sm text-[#F8FAFC] placeholder-[#5A5A62] transition-colors focus:border-white/50 focus:outline-none ${
             error ? "border-red-500/50" : "border-[#3A3A3A]"
-          } ${isPassword ? "pr-11" : "pr-4"}`}
+          } ${isPassword ? "pr-11" : "pr-4"} ${readOnly ? "opacity-60 cursor-not-allowed" : ""}`}
           {...register(id)}
         />
         {isPassword && (
@@ -73,9 +75,14 @@ function Field({ id, label, type = "text", placeholder, error, autoComplete, reg
 // ─── RegisterForm ─────────────────────────────────────────────────────────────
 export function RegisterForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [showDemoHelper, setShowDemoHelper] = useState(false);
+
+  const emailParam = searchParams.get("email") || "";
+  const inviteTokenParam = searchParams.get("inviteToken") || "";
+  const roleTypeParam = (searchParams.get("roleType") || "brand") as "brand" | "agency" | "talent";
 
   const {
     register,
@@ -87,13 +94,18 @@ export function RegisterForm() {
     resolver: zodResolver(registerSchema),
     defaultValues: {
       fullName: "",
-      email: "",
-      roleType: "brand",
+      email: emailParam,
+      roleType: roleTypeParam,
       workspaceName: "",
       password: "",
       confirmPassword: "",
     },
   });
+
+  React.useEffect(() => {
+    if (emailParam) setValue("email", emailParam);
+    if (roleTypeParam) setValue("roleType", roleTypeParam);
+  }, [emailParam, roleTypeParam, setValue]);
 
   const selectedRole = watch("roleType");
 
@@ -123,6 +135,7 @@ export function RegisterForm() {
             data.roleType === "talent"
               ? `${data.fullName}'s Workspace`
               : data.workspaceName,
+          inviteToken: inviteTokenParam || undefined,
         }),
       });
 
@@ -318,7 +331,9 @@ export function RegisterForm() {
                   <select
                     id="roleType"
                     {...register("roleType")}
-                    className="w-full appearance-none rounded-lg border border-[#3A3A3A] bg-[#0B0B0B] px-4 py-3 text-sm text-[#F8FAFC] transition-colors focus:border-white/50 focus:outline-none cursor-pointer"
+                    className={`w-full appearance-none rounded-lg border border-[#3A3A3A] bg-[#0B0B0B] px-4 py-3 text-sm text-[#F8FAFC] transition-colors focus:border-white/50 focus:outline-none ${
+                      inviteTokenParam ? "pointer-events-none opacity-60 cursor-not-allowed" : "cursor-pointer"
+                    }`}
                   >
                     <option value="brand" className="bg-[#0B0B0B] text-white">Brand</option>
                     <option value="agency" className="bg-[#0B0B0B] text-white">Agency</option>
@@ -349,6 +364,7 @@ export function RegisterForm() {
                 placeholder="you@company.com"
                 autoComplete="email"
                 error={errors.email?.message}
+                readOnly={!!inviteTokenParam}
                 register={register}
               />
 

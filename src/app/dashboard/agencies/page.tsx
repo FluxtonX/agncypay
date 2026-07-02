@@ -61,7 +61,7 @@ export default function AgenciesPage() {
       setTimeout(() => setSuccessMessage(''), 4000);
     } catch (err: any) {
       console.error('Connection request failed:', err);
-      setErrorMessage(err?.data?.message || err?.message || 'Failed to send request');
+      setErrorMessage(err?.data?.error?.message || err?.data?.message || err?.message || 'Failed to send request');
     }
   };
 
@@ -147,51 +147,53 @@ export default function AgenciesPage() {
               {errorMessage && <p className="text-[10px] text-red-400 font-semibold">{errorMessage}</p>}
 
               {/* Search Results / Fallbacks */}
-              <div className="space-y-2 pt-2 border-t border-[#222]">
-                {isSearching ? (
-                  <div className="flex items-center gap-2 text-neutral-400 py-3 justify-center text-[10px]">
-                    <Loader2 className="h-4 w-4 animate-spin" /> Searching directory...
-                  </div>
-                ) : debouncedQuery.trim() === '' ? (
-                  <p className="text-[10px] text-neutral-500 text-center py-4">Enter a name or email address above.</p>
-                ) : searchResults.length > 0 ? (
-                  <div className="space-y-2">
-                    <p className="text-[9px] font-bold text-neutral-400 uppercase tracking-wider">Registered Directory Matches</p>
-                    {searchResults.map((user) => (
-                      <div key={user.id} className="p-2.5 rounded bg-black border border-[#222] flex items-center justify-between gap-3">
-                        <div className="min-w-0">
-                          <p className="font-bold text-white text-[11px] truncate">{user.fullName}</p>
-                          <p className="text-[10px] text-neutral-400 truncate">{user.email}</p>
-                          <span className="inline-block mt-1 text-[8px] font-mono px-1.5 py-0.25 rounded bg-neutral-800 text-neutral-300 capitalize">{user.role}</span>
+              {!successMessage && (
+                <div className="space-y-2 pt-2 border-t border-[#222]">
+                  {isSearching ? (
+                    <div className="flex items-center gap-2 text-neutral-400 py-3 justify-center text-[10px]">
+                      <Loader2 className="h-4 w-4 animate-spin" /> Searching directory...
+                    </div>
+                  ) : debouncedQuery.trim() === '' ? (
+                    <p className="text-[10px] text-neutral-500 text-center py-4">Enter a name or email address above.</p>
+                  ) : searchResults.length > 0 ? (
+                    <div className="space-y-2">
+                      <p className="text-[9px] font-bold text-neutral-400 uppercase tracking-wider">Registered Directory Matches</p>
+                      {searchResults.map((user) => (
+                        <div key={user.id} className="p-2.5 rounded bg-black border border-[#222] flex items-center justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="font-bold text-white text-[11px] truncate">{user.fullName}</p>
+                            <p className="text-[10px] text-neutral-400 truncate">{user.email}</p>
+                            <span className="inline-block mt-1 text-[8px] font-mono px-1.5 py-0.25 rounded bg-neutral-800 text-neutral-300 capitalize">{user.role}</span>
+                          </div>
+                          <Button
+                            onClick={() => handleConnect(user.email)}
+                            disabled={isConnecting}
+                            className="h-7 px-3 bg-white text-black hover:bg-neutral-200 text-[10px] font-bold cursor-pointer shrink-0"
+                          >
+                            Connect
+                          </Button>
                         </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-3">
+                      <p className="text-[10px] text-neutral-500 mb-3">No registered members found for this query.</p>
+                      {isEmailQuery ? (
                         <Button
-                          onClick={() => handleConnect(user.email)}
+                          onClick={() => handleConnect(searchQuery)}
                           disabled={isConnecting}
-                          className="h-7 px-3 bg-white text-black hover:bg-neutral-200 text-[10px] font-bold cursor-pointer shrink-0"
+                          className="w-full h-8 bg-neutral-800 text-white hover:bg-neutral-700 text-[10px] font-bold flex items-center justify-center gap-1 cursor-pointer"
                         >
-                          Connect
+                          <Plus className="h-3.5 w-3.5" />
+                          Invite &quot;{searchQuery}&quot; to AgencyPay
                         </Button>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-center py-3">
-                    <p className="text-[10px] text-neutral-500 mb-3">No registered members found for this query.</p>
-                    {isEmailQuery ? (
-                      <Button
-                        onClick={() => handleConnect(searchQuery)}
-                        disabled={isConnecting}
-                        className="w-full h-8 bg-neutral-800 text-white hover:bg-neutral-700 text-[10px] font-bold flex items-center justify-center gap-1 cursor-pointer"
-                      >
-                        <Plus className="h-3.5 w-3.5" />
-                        Invite &quot;{searchQuery}&quot; to AgencyPay
-                      </Button>
-                    ) : (
-                      <p className="text-[9px] text-amber-500/80 font-bold">Type a valid email address to send an invitation.</p>
-                    )}
-                  </div>
-                )}
-              </div>
+                      ) : (
+                        <p className="text-[9px] text-amber-500/80 font-bold">Type a valid email address to send an invitation.</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </Card>
 

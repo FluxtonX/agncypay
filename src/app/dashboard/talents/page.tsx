@@ -63,7 +63,7 @@ export default function TalentsPage() {
       setTimeout(() => setSuccessMessage(''), 4000);
     } catch (err: any) {
       console.error('Connection request failed:', err);
-      setErrorMessage(err?.data?.message || err?.message || 'Failed to send request');
+      setErrorMessage(err?.data?.error?.message || err?.data?.message || err?.message || 'Failed to send request');
     }
   };
 
