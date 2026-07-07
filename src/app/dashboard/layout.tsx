@@ -93,6 +93,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   ];
 
   const renderTopbarStatus = () => {
+    if (userRole === "talent") return null;
     const connectedProviders = providerList.filter((p) => connectionStatuses[p.id as ProviderType]?.connected);
     const erroredProviders = providerList.filter((p) => !!providerErrors[p.id as ProviderType]);
 
@@ -166,8 +167,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   const talentNavigationItems = [
     { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+    { name: "Campaigns", href: "/dashboard/campaigns", icon: Briefcase },
+    { name: "Connections", href: "/dashboard/connections", icon: Users },
     { name: "Invoices", href: "/dashboard/invoices", icon: Receipt },
+    { name: "Payments", href: "/dashboard/payments", icon: ArrowUpRight },
     { name: "Wallet", href: "/dashboard/wallet", icon: Wallet },
+    { name: "Reports", href: "/dashboard/reports", icon: BarChart3 },
+    { name: "Integrations", href: "/dashboard/integrations", icon: Link2 },
     { name: "Settings", href: "/dashboard/settings", icon: Settings },
   ];
 

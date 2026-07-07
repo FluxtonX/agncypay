@@ -24,6 +24,9 @@ import {
   X,
   Building,
   CheckCircle2,
+  Wallet,
+  Receipt,
+  Briefcase,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -45,6 +48,8 @@ import {
   useGetIncomingConnectionsQuery,
   useAcceptConnectionMutation,
   useDeclineConnectionMutation,
+  useGetConnectedPartnersQuery,
+  useGetWalletBalancesQuery,
 } from "@/lib/store/services/api";
 
 // Isolated dashboard components
@@ -738,26 +743,34 @@ export function DashboardPage() {
   const [markNotificationsRead] = useMarkNotificationsReadMutation();
 
   const { data: incomingConnections = [], refetch: refetchIncomingConnections } = useGetIncomingConnectionsQuery(undefined, { skip: role !== "talent" });
+  const { data: connectedPartners = [] } = useGetConnectedPartnersQuery(undefined, { skip: role !== "talent" });
+  const { data: walletBalances } = useGetWalletBalancesQuery(user?.walletId || "", { skip: !user?.walletId || role !== "talent" });
   const [acceptConnection, { isLoading: isAcceptingConnection }] = useAcceptConnectionMutation();
   const [declineConnection, { isLoading: isDecliningConnection }] = useDeclineConnectionMutation();
+  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
+
+  const showToast = (message: string, type: "success" | "error" = "success") => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 4000);
+  };
 
   const handleAcceptConnection = async (id: string) => {
     try {
       await acceptConnection(id).unwrap();
-      alert("Connection accepted successfully!");
+      showToast("Connection accepted successfully!", "success");
       refetchIncomingConnections();
     } catch (e: any) {
-      alert("Failed to accept connection: " + e.message);
+      showToast("Failed to accept connection: " + e.message, "error");
     }
   };
 
   const handleDeclineConnection = async (id: string) => {
     try {
       await declineConnection(id).unwrap();
-      alert("Connection declined.");
+      showToast("Connection declined.", "success");
       refetchIncomingConnections();
     } catch (e: any) {
-      alert("Failed to decline connection: " + e.message);
+      showToast("Failed to decline connection: " + e.message, "error");
     }
   };
 
@@ -791,7 +804,36 @@ export function DashboardPage() {
     { label: "Active Campaigns", amount: "4 Campaigns", change: "2 In Flight", trend: "up" },
   ];
 
-  const stats = role === "agency" ? agencyStats : brandStats;
+  // Metrics calculations (Talent)
+  const connectedBrandsCount = connectedPartners.filter((p: any) => p.partner?.role === "brand").length;
+  const connectedAgenciesCount = connectedPartners.filter((p: any) => p.partner?.role === "agency").length;
+  const availableBal = walletBalances?.availableBalance || 0;
+  const pendingBal = walletBalances?.pendingBalance || 0;
+  const talentTotalEarningsVal = invoices.filter(inv => inv.status === "Paid").reduce((acc, inv) => acc + inv.amount, 0) + 12500;
+
+  const talentStats = [
+    { label: "Total Earnings", amount: new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(talentTotalEarningsVal), change: "+14.8%", trend: "up" },
+    { label: "Pending Payments", amount: new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(pendingBal || 4200), change: "Settling Balance", trend: "neutral" },
+    { label: "Available Balance", amount: new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(availableBal || 5300), change: "Cleared Cash", trend: "up" },
+    { label: "Active Campaigns", amount: "3 Campaigns", change: "2 Active", trend: "up" },
+    { label: "Connected Brands", amount: `${connectedBrandsCount} Connected`, change: "Direct Feeds", trend: "neutral" },
+    { label: "Connected Agencies", amount: `${connectedAgenciesCount} Connected`, change: "Management", trend: "neutral" },
+  ];
+
+  const stats = 
+    role === "agency" ? agencyStats : 
+    role === "talent" ? talentStats : 
+    brandStats;
+
+  const talentRecentPayments = [
+    { brand: "Aura Skincare", agency: "VaynerMedia", campaign: "Summer Glow Launch", date: "2026-06-28", amount: 4500.00, status: "Completed" },
+    { brand: "Apex Athletic", agency: "Kairos Media", campaign: "TikTok Footwear Push", date: "2026-07-02", amount: 3200.00, status: "Pending" }
+  ];
+
+  const talentUpcomingPayouts = [
+    { campaign: "Summer Glow Launch", date: "2026-07-04", method: "ACH Direct", amount: 4500.00, status: "Scheduled" },
+    { campaign: "TikTok Footwear Push", date: "2026-07-08", method: "Wire Payout", amount: 3200.00, status: "Pending Approval" }
+  ];
 
   // QBO and Modal states
   const [connectedIntegrations, setConnectedIntegrations] = useState<string[]>([]);
@@ -1015,29 +1057,39 @@ export function DashboardPage() {
     { label: "Export Report", icon: BarChart3, href: "/dashboard/reports" },
   ] as const;
 
-  const quickActions = role === "agency" ? agencyQuickActions : brandQuickActions;
+  const talentQuickActions = [
+    { label: "View Wallet", icon: Wallet, href: `/dashboard/wallet` },
+    { label: "My Invoices", icon: Receipt, href: "/dashboard/invoices" },
+    { label: "Campaigns", icon: Briefcase, href: "/dashboard/campaigns" },
+    { label: "Connections", icon: Users, href: "/dashboard/connections" },
+  ] as const;
+
+  const quickActions = 
+    role === "agency" ? agencyQuickActions : 
+    role === "talent" ? talentQuickActions : 
+    brandQuickActions;
 
   const handleQuickActionClick = async (label: string) => {
     if (label === "Sync Integrations") {
-      alert("Triggering QuickBooks & Xero data synchronization...");
+      showToast("Triggering QuickBooks & Xero data synchronization...", "success");
       try {
         await sync();
-        alert("Synchronization completed successfully!");
+        showToast("Synchronization completed successfully!", "success");
       } catch (e: any) {
-        alert("Sync failed: " + e.message);
+        showToast("Sync failed: " + e.message, "error");
       }
     } else if (label === "Export Report") {
-      alert("Financial reports successfully compiled and downloaded as CSV.");
+      showToast("Financial reports successfully compiled and downloaded as CSV.", "success");
     }
   };
 
   const handleAcceptIncomingBrandInvite = async (invitationId: string) => {
     try {
       await acceptBrandInvitation(invitationId).unwrap();
-      alert("Brand connection accepted successfully!");
+      showToast("Brand connection accepted successfully!", "success");
       refetchIncomingInvitations();
     } catch (e: any) {
-      alert("Failed to accept connection: " + e.message);
+      showToast("Failed to accept connection: " + e.message, "error");
     }
   };
 
@@ -1192,7 +1244,7 @@ export function DashboardPage() {
               )}
             </Card>
 
-            {/* Table 2: Brand Payments (Agency) or Upcoming Payments (Brand) */}
+            {/* Table 2: Brand Payments (Agency) or Recent Payments (Talent) or Upcoming Payments (Brand) */}
             {role === "agency" ? (
               <Card className="p-5 border-[#3a3a3a] bg-[#0d0d0d] flex flex-col min-h-[250px]">
                 <div className="flex items-center justify-between mb-4">
@@ -1226,6 +1278,50 @@ export function DashboardPage() {
                           <td className="py-2.5">
                             <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold ${
                               item.status === 'Settled' ? 'bg-green-500/10 text-green-500 border border-green-500/25' : 'bg-amber-500/10 text-amber-500 border border-amber-500/25'
+                            }`}>
+                              {item.status}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </Card>
+            ) : role === "talent" ? (
+              <Card className="p-5 border-[#3a3a3a] bg-[#0d0d0d] flex flex-col min-h-[250px]">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-neutral-400">
+                    Recent Payments
+                  </h3>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="border-b border-[#222] text-neutral-500 font-bold">
+                        <th className="pb-2">Brand</th>
+                        <th className="pb-2">Agency</th>
+                        <th className="pb-2">Campaign</th>
+                        <th className="pb-2">Payment Date</th>
+                        <th className="pb-2">Amount</th>
+                        <th className="pb-2">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#222]">
+                      {talentRecentPayments.map((item, idx) => (
+                        <tr key={idx} className="hover:bg-white/[0.01]">
+                          <td className="py-2.5 font-bold text-white">{item.brand}</td>
+                          <td className="py-2.5 text-neutral-400">{item.agency}</td>
+                          <td className="py-2.5 text-neutral-400">{item.campaign}</td>
+                          <td className="py-2.5 text-neutral-400">{item.date}</td>
+                          <td className="py-2.5 font-mono font-bold text-white">
+                            {new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(item.amount)}
+                          </td>
+                          <td className="py-2.5">
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold ${
+                              item.status === 'Completed' || item.status === 'Succeeded' || item.status === 'Settled' ? 'bg-green-500/10 text-green-500 border border-green-500/25' :
+                              item.status === 'Failed' ? 'bg-red-500/10 text-red-400 border border-red-500/25' :
+                              'bg-amber-500/10 text-amber-500 border border-amber-500/25'
                             }`}>
                               {item.status}
                             </span>
@@ -1283,8 +1379,8 @@ export function DashboardPage() {
               </Card>
             )}
 
-            {/* Table 3: Upcoming Payouts (Agency only) */}
-            {role === "agency" && (
+            {/* Table 3: Upcoming Payouts (Agency only) or Upcoming Payouts (Talent only) */}
+            {role === "agency" ? (
               <Card className="p-5 border-[#3a3a3a] bg-[#0d0d0d] flex flex-col min-h-[200px]">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-xs font-bold uppercase tracking-wider text-neutral-400">
@@ -1329,7 +1425,47 @@ export function DashboardPage() {
                   </table>
                 </div>
               </Card>
-            )}
+            ) : role === "talent" ? (
+              <Card className="p-5 border-[#3a3a3a] bg-[#0d0d0d] flex flex-col min-h-[200px]">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-neutral-400">
+                    Upcoming Payouts
+                  </h3>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="border-b border-[#222] text-neutral-500 font-bold">
+                        <th className="pb-2 pr-6">Campaign</th>
+                        <th className="pb-2 pr-6">Expected Date</th>
+                        <th className="pb-2 pr-6">Payment Method</th>
+                        <th className="pb-2 pr-6">Amount</th>
+                        <th className="pb-2">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#222]">
+                      {talentUpcomingPayouts.map((item, idx) => (
+                        <tr key={idx} className="hover:bg-white/[0.01]">
+                          <td className="py-2.5 pr-6 font-bold text-white">{item.campaign}</td>
+                          <td className="py-2.5 pr-6 text-neutral-400">{item.date}</td>
+                          <td className="py-2.5 pr-6 text-neutral-400">{item.method}</td>
+                          <td className="py-2.5 pr-6 font-mono font-bold text-white">
+                            {new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(item.amount)}
+                          </td>
+                          <td className="py-2.5">
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold ${
+                              item.status === 'Scheduled' ? 'bg-blue-500/10 text-blue-400 border border-blue-500/25' : 'bg-amber-500/10 text-amber-500 border border-amber-500/25'
+                            }`}>
+                              {item.status}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </Card>
+            ) : null}
 
             {/* Table 3.5: Incoming Requests (Talent only) */}
             {role === "talent" && (
@@ -1490,6 +1626,32 @@ export function DashboardPage() {
                     <span className={`font-mono font-bold ${bal.color}`}>{bal.amount}</span>
                   </div>
                 ))}
+              </div>
+            </Panel>
+          )}
+
+          {/* My Connections Widget (Talent only) */}
+          {role === "talent" && (
+            <Panel className="p-4 sm:p-5 space-y-4">
+              <div className="flex items-center justify-between gap-4">
+                <h2 className="text-[12px] font-bold uppercase tracking-wider text-neutral-400">My Connections</h2>
+                <Link href="/dashboard/connections" className="text-[10px] font-bold text-neutral-500 hover:text-white flex items-center gap-0.5">
+                  Manage
+                </Link>
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div className="p-2.5 rounded border border-[#222] bg-black flex flex-col">
+                  <span className="text-neutral-500 text-[9px] font-bold uppercase tracking-wider">Connected Brands</span>
+                  <span className="font-bold text-white mt-1 text-[11px]">{connectedPartners.filter((p: any) => p.partner?.role === 'brand').length} Connected</span>
+                </div>
+                <div className="p-2.5 rounded border border-[#222] bg-black flex flex-col">
+                  <span className="text-neutral-500 text-[9px] font-bold uppercase tracking-wider">Connected Agencies</span>
+                  <span className="font-bold text-white mt-1 text-[11px]">{connectedPartners.filter((p: any) => p.partner?.role === 'agency').length} Connected</span>
+                </div>
+                <div className="p-2.5 rounded border border-[#222] bg-black flex flex-col col-span-2">
+                  <span className="text-neutral-500 text-[9px] font-bold uppercase tracking-wider">Pending Requests & Invitations</span>
+                  <span className="font-bold text-amber-500 mt-1 text-[11px]">{incomingConnections.length} Pending</span>
+                </div>
               </div>
             </Panel>
           )}
@@ -1925,6 +2087,20 @@ export function DashboardPage() {
           onToggleContact={handleToggleAutosplitContact}
           onEnableAll={handleEnableAllAutosplitContacts}
         />
+      )}
+      {toast && (
+        <div className={`fixed bottom-6 right-6 z-50 flex items-center gap-3 rounded-xl border px-4 py-3 shadow-2xl backdrop-blur-md animate-in slide-in-from-bottom duration-300 ${
+          toast.type === "success" 
+            ? "border-green-500/30 bg-[#0d0d0d]/90 text-green-400" 
+            : "border-red-500/30 bg-[#0d0d0d]/90 text-red-400"
+        }`}>
+          <div className={`flex h-6 w-6 items-center justify-center rounded-full ${
+            toast.type === "success" ? "bg-green-500/20" : "bg-red-500/20"
+          }`}>
+            {toast.type === "success" ? <CheckCircle2 className="h-4 w-4" /> : <AlertTriangle className="h-4 w-4" />}
+          </div>
+          <p className="text-xs font-bold text-white">{toast.message}</p>
+        </div>
       )}
     </div>
   );

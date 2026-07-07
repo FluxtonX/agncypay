@@ -92,12 +92,14 @@ const getProviderDetails = (provider: ProviderType) => {
 
 export function InvoicesPage() {
   const { state } = useApp();
+  const role = state.user?.role || "brand";
   const router = useRouter();
   const [payments, setPayments] = useState<BackendPayment[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [selectedInvoice, setSelectedInvoice] = useState<any | null>(null);
 
   // Provider Invoices state from unified store
   const { currentProvider, allInvoices, loading: loadingProvider, connectionStatuses, error: providerError } = useAccounting();
@@ -484,7 +486,18 @@ export function InvoicesPage() {
                                         </Badge>
                                       </td>
                                       <td className="px-4 py-2.5 text-right pr-4">
-                                        {item.status === "Pending" ? (
+                                        {role === "talent" ? (
+                                          <button
+                                            type="button"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              setSelectedInvoice(item);
+                                            }}
+                                            className="h-6 px-2.5 bg-white text-black hover:bg-neutral-200 font-bold rounded text-[10px] transition-all cursor-pointer inline-flex items-center justify-center hover:scale-[1.02] active:scale-[0.98]"
+                                          >
+                                            View Details
+                                          </button>
+                                        ) : item.status === "Pending" ? (
                                           <button
                                             type="button"
                                             onClick={(e) => {
@@ -637,6 +650,63 @@ export function InvoicesPage() {
           </Button>
         </form>
       </Modal>
+
+      {/* Modal: View Details (Talent only) */}
+      {selectedInvoice && (
+        <Modal isOpen={!!selectedInvoice} onClose={() => setSelectedInvoice(null)} title="Invoice Details">
+          <div className="space-y-4 text-xs font-semibold text-neutral-300">
+            <div className="flex justify-between py-2 border-b border-[#222]">
+              <span className="text-neutral-500">Invoice Number</span>
+              <span className="text-white font-bold">#{selectedInvoice.docNumber}</span>
+            </div>
+            <div className="flex justify-between py-2 border-b border-[#222]">
+              <span className="text-neutral-500">Brand / Client</span>
+              <span className="text-white font-bold">{selectedInvoice.name || "Default Client"}</span>
+            </div>
+            <div className="flex justify-between py-2 border-b border-[#222]">
+              <span className="text-neutral-500">Source Provider</span>
+              <span className="text-white capitalize font-bold">
+                {selectedInvoice.provider === 'quickbooks' ? 'QuickBooks Online' : selectedInvoice.provider === 'xero' ? 'Xero' : selectedInvoice.provider}
+              </span>
+            </div>
+            <div className="flex justify-between py-2 border-b border-[#222]">
+              <span className="text-neutral-500">Invoice Date</span>
+              <span className="text-neutral-400">{selectedInvoice.date}</span>
+            </div>
+            <div className="flex justify-between py-2 border-b border-[#222]">
+              <span className="text-neutral-500">Amount</span>
+              <span className="text-white font-mono font-bold">
+                ${selectedInvoice.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+              </span>
+            </div>
+            <div className="flex justify-between py-2">
+              <span className="text-neutral-500">Status</span>
+              <Badge variant={selectedInvoice.status === "Paid" ? "success" : "warning"} className="capitalize">
+                {selectedInvoice.status.toLowerCase()}
+              </Badge>
+            </div>
+            
+            {/* Future NetXero financing action placeholders */}
+            {/* 
+            <div className="pt-2 border-t border-[#222] space-y-2">
+              <span className="block text-[10px] text-neutral-500 font-bold uppercase tracking-wider">NetXero Financing Options</span>
+              <Button disabled className="w-full h-8 text-[10px]">Withdraw Early (Not Eligible)</Button>
+              <Button disabled className="w-full h-8 text-[10px]">Request Advance</Button>
+            </div>
+            */}
+
+            <div className="pt-4 flex gap-3">
+              <Button
+                variant="secondary"
+                onClick={() => setSelectedInvoice(null)}
+                className="w-full h-9 font-bold cursor-pointer"
+              >
+                Close
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }

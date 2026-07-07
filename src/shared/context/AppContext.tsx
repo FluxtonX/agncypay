@@ -3,6 +3,8 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Workspace, getVerificationTrack } from "@/shared/types/workspace";
+import { useDispatch } from "react-redux";
+import { setCredentials, clearCredentials, switchWorkspaceAction } from "@/lib/store/slices/authSlice";
 
 interface AuthUser {
   id: string;
@@ -31,6 +33,7 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
+  const dispatch = useDispatch();
   const [state, setState] = useState<AppState>({
     user: null,
     token: null,
@@ -85,6 +88,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     localStorage.setItem("agncypay_workspaces", JSON.stringify([defaultWs]));
     localStorage.setItem("agncypay_active_ws", defaultWs.id);
 
+    dispatch(setCredentials({ token, user, workspaces: [defaultWs] }));
+
     setState({
       token,
       user,
@@ -99,6 +104,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     localStorage.removeItem("agncypay_workspaces");
     localStorage.removeItem("agncypay_active_ws");
 
+    dispatch(clearCredentials());
+
     setState({
       token: null,
       user: null,
@@ -110,6 +117,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const switchWorkspace = (workspaceId: string) => {
     localStorage.setItem("agncypay_active_ws", workspaceId);
+    dispatch(switchWorkspaceAction(workspaceId));
     setState((prev) => ({
       ...prev,
       activeWorkspaceId: workspaceId,
