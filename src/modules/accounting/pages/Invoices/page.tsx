@@ -187,8 +187,45 @@ export function InvoicesPage() {
       });
       const body = await res.json();
       if (res.ok) {
+        const rawPayments = body.data || [];
+        const nonManual = rawPayments.filter((p: any) => p.source !== "MANUAL");
+        
+        const groupedManual: { [vendor: string]: any } = {};
+        for (const p of rawPayments) {
+          if (p.source !== "MANUAL") continue;
+          const vendorName = p.metadata?.vendor || "Digital Sales";
+          const amount = parseFloat(p.amount);
+          const createdAt = new Date(p.createdAt);
+
+          if (groupedManual[vendorName]) {
+            groupedManual[vendorName].amount = (parseFloat(groupedManual[vendorName].amount) + amount).toString();
+            if (createdAt > new Date(groupedManual[vendorName].createdAt)) {
+              groupedManual[vendorName].createdAt = p.createdAt;
+              groupedManual[vendorName].status = p.status;
+            }
+          } else {
+            groupedManual[vendorName] = {
+              id: p.id,
+              invoiceId: p.externalId?.split("-").slice(1).join("-").toUpperCase() || "CSV",
+              invoiceData: {
+                clientName: vendorName
+              },
+              description: p.description || "Manual File Ingestion",
+              createdAt: p.createdAt,
+              amount: p.amount,
+              status: p.status,
+              source: "MANUAL",
+              isManual: true,
+              logo: `https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=http://${vendorName.toLowerCase().replace(/[^a-z0-9]/g, '')}.com&size=128`
+            };
+          }
+        }
+        
+        const combined = [...nonManual, ...Object.values(groupedManual)];
+        combined.sort((a, b) => parseFloat(b.amount) - parseFloat(a.amount));
+
         startTransition(() => {
-          setPayments(body.data || []);
+          setPayments(combined);
         });
       }
     } catch (err) {
@@ -260,6 +297,8 @@ export function InvoicesPage() {
     }
   };
 
+  const totalAmount = payments.reduce((sum, p) => sum + parseFloat(p.amount), 0);
+
   return (
     <div className="space-y-6 select-text">
       {/* Back Button */}
@@ -325,38 +364,105 @@ export function InvoicesPage() {
             <table className="w-full text-left text-xs font-semibold text-neutral-300">
               <thead>
                 <tr className="border-b border-[#3a3a3a] pb-3 text-neutral-500">
-                  <th className="py-3">Invoice ID</th>
-                  <th className="py-3">Client</th>
+                  <th className="py-3 w-[120px]">Invoice ID</th>
+                  <th className="py-3 w-[140px]">Client</th>
                   <th className="py-3">Description</th>
-                  <th className="py-3">Date Created</th>
-                  <th className="py-3">Amount</th>
-                  <th className="py-3 text-right">Status</th>
+                  <th className="py-3 w-[120px]">Date Created</th>
+                  <th className="py-3 w-[100px]">Amount</th>
+                  <th className="py-3 w-[100px]">Status</th>
+                  <th className="py-3 text-right pr-4 w-[80px]">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#3a3a3a]">
-                {payments.map((p) => (
-                  <tr key={p.id} className="hover:bg-white/[0.01] transition-colors">
-                    <td className="py-3.5 font-mono text-white">{p.invoiceId || p.externalId.split("-").pop()}</td>
-                    <td className="py-3.5 text-white">{p.invoiceData?.clientName || "Manual Client"}</td>
-                    <td className="py-3.5 text-neutral-400 max-w-[180px] truncate">{p.description}</td>
-                    <td className="py-3.5 text-neutral-500">
-                      {new Date(p.createdAt).toLocaleDateString("en-US", {
-                        month: "short",
-                        day: "numeric",
-                        year: "numeric",
-                      })}
-                    </td>
-                    <td className="py-3.5 text-white font-mono">${parseFloat(p.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                    <td className="py-3.5 text-right">
-                      <Badge
-                        variant={p.status === "SETTLED" ? "success" : "warning"}
-                        className="capitalize"
-                      >
-                        {p.status.toLowerCase()}
-                      </Badge>
-                    </td>
-                  </tr>
-                ))}
+                {payments.map((p) => {
+                  const rawId = p.invoiceId || p.externalId || "CSV";
+                  const displayId = rawId.length > 10 ? rawId.substring(0, 7) + "..." : rawId;
+                  return (
+                    <tr key={p.id} className="hover:bg-white/[0.01] transition-colors group">
+                      <td className="py-3.5 font-mono text-white">
+                        {displayId}
+                      </td>
+                      <td className="py-3.5 text-white max-w-[135px]">
+                        <div className="flex items-center gap-2 min-w-0">
+                          {p.isManual && (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img 
+                              src={p.logo} 
+                              alt={p.invoiceData?.clientName || "Manual"} 
+                              className="h-5 w-5 object-contain rounded shrink-0"
+                              onError={(e) => {
+                                // Fallback to generic icon if image fails to load
+                                (e.target as HTMLImageElement).src = "/music-file.png";
+                              }}
+                            />
+                          )}
+                          <span 
+                            className="truncate block flex-1 max-w-[100px]" 
+                            title={p.invoiceData?.clientName || "Manual Client"}
+                          >
+                            {p.invoiceData?.clientName || "Manual Client"}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="py-3.5 text-neutral-400">
+                        <span className="truncate block max-w-[160px]" title={p.description}>
+                          {p.description}
+                        </span>
+                      </td>
+                      <td className="py-3.5 text-neutral-500">
+                        {new Date(p.createdAt).toLocaleDateString("en-US", {
+                          month: "short",
+                          day: "numeric",
+                          year: "numeric",
+                        })}
+                      </td>
+                      <td className="py-3.5 text-white font-mono">${parseFloat(p.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                      <td className="py-3.5">
+                        <Badge
+                          variant={p.status === "SETTLED" ? "success" : "warning"}
+                          className="capitalize"
+                        >
+                          {p.status.toLowerCase()}
+                        </Badge>
+                      </td>
+                      <td className="py-3.5 text-right pr-4">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedInvoice({
+                            id: p.id,
+                            docNumber: rawId,
+                            name: p.invoiceData?.clientName || "Manual Client",
+                            provider: p.source ? p.source.toLowerCase() : "manual",
+                            date: new Date(p.createdAt).toLocaleDateString("en-US", {
+                              month: "short",
+                              day: "numeric",
+                              year: "numeric",
+                            }),
+                            amount: parseFloat(p.amount),
+                            status: p.status === "SETTLED" ? "Paid" : "Pending",
+                            description: p.description
+                          })}
+                          className="h-6 px-2.5 bg-neutral-900 border border-[#3a3a3a] text-white hover:bg-white hover:text-black font-bold rounded text-[10px] transition-all cursor-pointer inline-flex items-center justify-center opacity-0 group-hover:opacity-100"
+                        >
+                          View
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+
+                {/* Summary Total Row */}
+                <tr className="bg-white/[0.02] border-t-2 border-[#3a3a3a] font-bold">
+                  <td className="py-4 text-white font-bold">Total</td>
+                  <td className="py-4"></td>
+                  <td className="py-4"></td>
+                  <td className="py-4"></td>
+                  <td className="py-4 text-white font-mono font-bold">
+                    ${totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  </td>
+                  <td className="py-4"></td>
+                  <td className="py-4"></td>
+                </tr>
               </tbody>
             </table>
           </div>
@@ -685,6 +791,13 @@ export function InvoicesPage() {
                 {selectedInvoice.status.toLowerCase()}
               </Badge>
             </div>
+            
+            {selectedInvoice.description && (
+              <div className="flex justify-between py-2 border-t border-[#222]">
+                <span className="text-neutral-500">Description</span>
+                <span className="text-white font-medium max-w-[240px] text-right break-words">{selectedInvoice.description}</span>
+              </div>
+            )}
             
             {/* Future NetXero financing action placeholders */}
             {/* 

@@ -59,6 +59,7 @@ import { RecentVendorsCard } from "../../components/Dashboard/RecentVendorsCard"
 import { RecentInvoicesCard } from "../../components/InvoiceTable/RecentInvoicesCard";
 import { RequestAnalytics } from "@/features/dashboard/components/RequestAnalytics";
 import { PlaidConnector } from "@/features/dashboard/components/PlaidConnector";
+import { CsvDropzonePanel } from "@/features/dashboard/components/CsvDropzonePanel";
 
 const BOFA_BUSINESS_DEBIT_VISA_IMAGE =
   "https://business.bankofamerica.com/content/dam/consumer/business/deposits/checking-accounts/debit-cards/bofa_busdbtcm_v.png";
@@ -744,7 +745,18 @@ export function DashboardPage() {
 
   const { data: incomingConnections = [], refetch: refetchIncomingConnections } = useGetIncomingConnectionsQuery(undefined, { skip: role !== "talent" });
   const { data: connectedPartners = [] } = useGetConnectedPartnersQuery(undefined, { skip: role !== "talent" });
-  const { data: walletBalances } = useGetWalletBalancesQuery(user?.walletId || "", { skip: !user?.walletId || role !== "talent" });
+  const { data: walletBalances, refetch: refetchWalletBalances } = useGetWalletBalancesQuery(user?.walletId || "", { skip: !user?.walletId || role !== "talent" });
+
+  useEffect(() => {
+    const handleUpdate = () => {
+      if (role === "talent" && refetchWalletBalances) {
+        refetchWalletBalances();
+      }
+    };
+    window.addEventListener("incomesUpdated", handleUpdate);
+    return () => window.removeEventListener("incomesUpdated", handleUpdate);
+  }, [refetchWalletBalances, role]);
+
   const [acceptConnection, { isLoading: isAcceptingConnection }] = useAcceptConnectionMutation();
   const [declineConnection, { isLoading: isDecliningConnection }] = useDeclineConnectionMutation();
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
@@ -1654,6 +1666,11 @@ export function DashboardPage() {
                 </div>
               </div>
             </Panel>
+          )}
+
+          {/* 2.5 Manual Data Ingestion Dropzone (Talent & Agency only) */}
+          {role !== "brand" && (
+            <CsvDropzonePanel walletId={user?.walletId || ""} />
           )}
 
           {/* 3. Integrations Shortcuts Card */}
