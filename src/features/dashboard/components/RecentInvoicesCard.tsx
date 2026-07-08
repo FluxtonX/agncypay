@@ -45,6 +45,8 @@ export function RecentInvoicesCard() {
 
   useEffect(() => {
     fetchInvoices();
+    window.addEventListener("incomesUpdated", fetchInvoices);
+    return () => window.removeEventListener("incomesUpdated", fetchInvoices);
   }, [fetchInvoices]);
 
   const badgeVariant = (status: string) => {
